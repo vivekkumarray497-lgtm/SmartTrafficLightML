@@ -13,7 +13,13 @@
 {% if state.error %}<div class="error">{{state.error}}</div>{% endif %}
 <div class="grid">
 <div>
-<div class="card"><h2>📷 Live Traffic Camera</h2><img src="{{url_for('video_feed')}}" class="camera" alt="Live traffic camera"><p class="muted">YOLO detects vehicles and pedestrians from the connected camera.</p></div>
+<div class="card"><h2>📷 Live Traffic Camera</h2>
+<video id="cameraVideo" class="camera" autoplay playsinline muted></video>
+<canvas id="captureCanvas" style="display:none"></canvas>
+<img id="annotated" class="camera" alt="AI processed traffic" style="margin-top:10px">
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="startCamera()">Start Camera</button><button onclick="stopCamera()">Stop Camera</button></div>
+<p id="cameraStatus" class="muted">Browser camera is used, so this works on cloud deployment as well as local Windows.</p>
+</div>
 <div class="card"><h2>📊 Live Traffic Metrics</h2><div class="stats">
 <div class="stat">Cars<strong id="cars">{{state.cars}}</strong></div><div class="stat">Bikes<strong id="bikes">{{state.bikes}}</strong></div><div class="stat">Buses<strong id="buses">{{state.buses}}</strong></div><div class="stat">Trucks<strong id="trucks">{{state.trucks}}</strong></div>
 <div class="stat">Total<strong id="traffic">{{state.traffic}}</strong></div><div class="stat">Pedestrians<strong id="pedestrians">{{state.pedestrians}}</strong></div><div class="stat">Speed<strong id="speed">{{state.speed}}</strong></div><div class="stat">Density<strong id="density">{{state.density}}</strong></div>
@@ -29,13 +35,47 @@
 <div class="row"><div><label>Location ID</label><input type="number" name="location_id" value="1" required></div><div><label>Traffic Volume</label><input type="number" step="0.01" name="traffic_volume" value="10" required></div><div><label>Average Vehicle Speed</label><input type="number" step="0.01" name="avg_vehicle_speed" value="30" required></div><div><label>Cars</label><input type="number" name="vehicle_count_cars" value="5" required></div><div><label>Trucks</label><input type="number" name="vehicle_count_trucks" value="1" required></div><div><label>Bikes</label><input type="number" name="vehicle_count_bikes" value="2" required></div><div><label>Weather</label><select name="weather_condition"><option>Sunny</option><option>Cloudy</option><option>Rainy</option><option>Foggy</option><option>Windy</option></select></div><div><label>Temperature</label><input type="number" step="0.01" name="temperature" value="25" required></div><div><label>Humidity</label><input type="number" step="0.01" name="humidity" value="60" required></div><div><label>Accident</label><select name="accident_reported"><option value="0">No</option><option value="1">Yes</option></select></div><div><label>Hour</label><input type="number" name="hour" value="12" min="0" max="23" required></div><div><label>Minute</label><input type="number" name="minute" value="0" min="0" max="59" required></div><div><label>Day</label><input type="number" name="day" value="1" min="1" max="31" required></div><div><label>Month</label><input type="number" name="month" value="1" min="1" max="12" required></div><div><label>Emergency</label><select name="emergency_detected"><option value="0">No</option><option value="1">Yes</option></select></div></div><button type="submit">🚦 Predict Signal</button></form></div>
 </div>
 <script>
-let emergency=false;
+let emergency=false;\nlet cameraStream=null;\nlet captureTimer=null;\nlet processing=false;
 function render(s){
 ['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','active','green_time','updated','ml'].forEach(k=>{let e=document.getElementById(k);if(e&&s[k]!==undefined)e.textContent=s[k]});
 let sig=document.getElementById('signal');sig.textContent=(s.signal==='Green'?'🟢 ':s.signal==='Yellow'?'🟡 ':'🔴 ')+s.signal;sig.className='signal '+s.signal.toLowerCase();document.getElementById('message').textContent=s.signal_message;
 let em=document.getElementById('emergency');em.textContent=s.emergency?'🚑 Emergency priority active — GREEN priority':'No emergency priority active';em.className='emergency '+(s.emergency?'priority':'');
 let box=document.getElementById('directions');box.innerHTML='';let max=Math.max(1,...Object.values(s.directions||{}));for(const [d,n] of Object.entries(s.directions||{})){let div=document.createElement('div');div.className='direction '+(d===s.active_direction?'active':'');div.innerHTML='<b>'+d+'</b><br>'+n+' vehicles<div class="bar"><span style="width:'+Math.min(100,n/max*100)+'%"></span></div>'+(d===s.active_direction?'<small>GREEN</small>':'<small>RED</small>');box.appendChild(div)} }
 async function refresh(){try{let r=await fetch('/api/state');render(await r.json())}catch(e){}}setInterval(refresh,1500);refresh();
+
+async function startCamera(){
+  try{
+    if(cameraStream) return;
+    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:960},height:{ideal:540}},audio:false});
+    document.getElementById('cameraVideo').srcObject=cameraStream;
+    document.getElementById('cameraStatus').textContent='Camera connected. AI processing is running.';
+    captureTimer=setInterval(sendFrame,700);
+  }catch(e){
+    document.getElementById('cameraStatus').textContent='Camera permission/error: '+e.message;
+  }
+}
+function stopCamera(){
+  if(captureTimer){clearInterval(captureTimer);captureTimer=null}
+  if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}
+  document.getElementById('cameraVideo').srcObject=null;
+  document.getElementById('cameraStatus').textContent='Camera stopped.';
+}
+async function sendFrame(){
+  if(processing || !cameraStream) return;
+  const video=document.getElementById('cameraVideo'), canvas=document.getElementById('captureCanvas');
+  if(video.readyState<2) return;
+  canvas.width=640; canvas.height=Math.round(640*video.videoHeight/video.videoWidth)||360;
+  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  processing=true;
+  try{
+    const r=await fetch('/api/frame',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:canvas.toDataURL('image/jpeg',0.72)})});
+    const data=await r.json();
+    if(data.error){document.getElementById('cameraStatus').textContent=data.error}
+    else{document.getElementById('annotated').src=data.image;render(data)}
+  }catch(e){document.getElementById('cameraStatus').textContent='Server connection error: '+e.message}
+  finally{processing=false}
+}
+window.addEventListener('beforeunload',stopCamera);
 async function toggleEmergency(){emergency=!emergency;let r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emergency})});render(await r.json())}
 </script>
 </body></html>
