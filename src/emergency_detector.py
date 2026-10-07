@@ -5,20 +5,24 @@ from ultralytics import YOLOWorld
 
 class EmergencyDetector:
     """
-    Zero-shot emergency vehicle detector using Ultralytics YOLO-World.
+    Two-stage emergency vehicle detector using YOLO-World.
 
-    Only ambulance and fire truck are treated as emergency vehicles.
-    A short confirmation streak reduces false triggers from single-frame
-    detections. EMERGENCY_MODEL_PATH may point to a custom-trained model.
+    Only ambulance and fire truck are accepted. Stronger confidence,
+    multi-frame confirmation, and overlap checks against the normal
+    traffic detector reduce buses/cars being reported as emergencies.
     """
 
-    def __init__(self, model_path=None, confidence=0.38, consecutive_required=2, miss_tolerance=2):
+    EMERGENCY_LABELS = {"ambulance", "fire truck"}
+
+    def __init__(self, model_path=None, confidence=0.55, consecutive_required=3, miss_tolerance=1):
         self.model_path = model_path or os.environ.get("EMERGENCY_MODEL_PATH", "yolov8s-world.pt")
         self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
         self.consecutive_required = max(
             1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
         )
-        self.miss_tolerance = max(0, int(os.environ.get("EMERGENCY_MISS_TOLERANCE", miss_tolerance)))
+        self.miss_tolerance = max(
+            0, int(os.environ.get("EMERGENCY_MISS_TOLERANCE", miss_tolerance))
+        )
         self.model = None
         self.available = False
         self.error = ""
@@ -37,7 +41,10 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
-                self.model.set_classes(["ambulance", "fire truck"])
+                self.model.set_classes([
+                    "ambulance emergency vehicle",
+                    "fire truck fire engine emergency vehicle",
+                ])
                 self.available = True
             except Exception as exc:
                 self.error = str(exc)[:220]
@@ -51,6 +58,21 @@ class EmergencyDetector:
             return "East" if dx > 0 else "West"
         return "South" if dy > 0 else "North"
 
+    @staticmethod
+    def _iou(a, b):
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+        intersection = iw * ih
+        if intersection <= 0:
+            return 0.0
+        area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
+        area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
+        union = area_a + area_b - intersection
+        return intersection / union if union else 0.0
+
     def _empty(self):
         return {
             "detected": False,
@@ -60,7 +82,7 @@ class EmergencyDetector:
             "detections": [],
         }
 
-    def detect(self, frame):
+    def detect(self, frame, traffic_boxes=None):
         self._load()
         if not self.available:
             return self._empty()
@@ -76,18 +98,35 @@ class EmergencyDetector:
 
             detections = []
             height, width = frame.shape[:2]
+            traffic_boxes = traffic_boxes or []
 
             if result.boxes is not None:
                 names = result.names
                 for box in result.boxes:
                     confidence = float(box.conf[0])
                     class_id = int(box.cls[0])
-                    label = str(names[class_id]).lower().strip()
+                    raw_label = str(names[class_id]).lower().strip()
 
-                    if label not in {"ambulance", "fire truck"}:
+                    if raw_label.startswith("ambulance"):
+                        label = "ambulance"
+                    elif raw_label.startswith("fire truck") or raw_label.startswith("fire engine"):
+                        label = "fire truck"
+                    else:
                         continue
 
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    candidate_box = [x1, y1, x2, y2]
+
+                    # A normal COCO detector frequently calls an ordinary bus a
+                    # bus. Reject an emergency candidate that substantially
+                    # overlaps a bus unless its emergency confidence is very high.
+                    overlaps_bus = any(
+                        item["class_id"] == 5 and self._iou(candidate_box, item["box"]) >= 0.45
+                        for item in traffic_boxes
+                    )
+                    if overlaps_bus and confidence < 0.78:
+                        continue
+
                     cx = (x1 + x2) / 2
                     cy = (y1 + y2) / 2
                     direction = self._direction(cx, cy, width, height)
@@ -96,7 +135,7 @@ class EmergencyDetector:
                         "label": label,
                         "confidence": confidence,
                         "direction": direction,
-                        "box": [x1, y1, x2, y2],
+                        "box": candidate_box,
                     })
 
             if not detections:
@@ -119,10 +158,7 @@ class EmergencyDetector:
             self._misses = 0
             best = max(detections, key=lambda item: item["confidence"])
 
-            if (
-                best["label"] == self._last_type
-                and best["direction"] == self._last_direction
-            ):
+            if best["label"] == self._last_type and best["direction"] == self._last_direction:
                 self._streak += 1
             else:
                 self._streak = 1
