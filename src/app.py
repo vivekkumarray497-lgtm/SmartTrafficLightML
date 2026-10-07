@@ -203,6 +203,7 @@ def api_health():
         "browser_camera": True,
         "model": True,
         "emergency_detector": emergency_detector.available,
+        "emergency_detector_loaded": emergency_detector.model is not None,
         "emergency_detector_error": emergency_detector.error
     })
 
