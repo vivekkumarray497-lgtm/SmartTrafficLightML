@@ -4,6 +4,7 @@ import math
 import numpy as np
 from collections import defaultdict, deque
 
+
 class VisionEngine:
     VEHICLES = {2: "cars", 3: "bikes", 5: "buses", 7: "trucks"}
 
@@ -26,6 +27,7 @@ class VisionEngine:
         directions = {d: 0 for d in ["North", "South", "East", "West"]}
         pedestrians = 0
         speeds = []
+        traffic_boxes = []
 
         result = self.model.track(
             frame, persist=True, conf=0.30, iou=0.45,
@@ -51,6 +53,10 @@ class VisionEngine:
                     directions[self._direction(cx, cy, w, h)] += 1
                     name = key[:-1].title()
                     label_color = (0, 255, 0)
+                    traffic_boxes.append({
+                        "class_id": cid,
+                        "box": [x1, y1, x2, y2],
+                    })
                 else:
                     continue
 
@@ -81,10 +87,11 @@ class VisionEngine:
         emergency_confidence = 0.0
 
         if self.emergency_detector is not None:
-            # Run emergency detection on a clean frame so traffic overlays do not
-            # become visual noise for the emergency model.
             emergency_frame = frame.copy()
-            emergency_info = self.emergency_detector.detect(emergency_frame)
+            emergency_info = self.emergency_detector.detect(
+                emergency_frame,
+                traffic_boxes=traffic_boxes,
+            )
             emergency = emergency_info["detected"]
             emergency_type = emergency_info["type"]
             emergency_direction = emergency_info["direction"]
