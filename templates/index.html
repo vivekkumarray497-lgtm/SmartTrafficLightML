@@ -18,64 +18,166 @@
 <canvas id="captureCanvas" style="display:none"></canvas>
 <img id="annotated" class="camera" alt="AI processed traffic" style="margin-top:10px">
 <div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="startCamera()">Start Camera</button><button onclick="stopCamera()">Stop Camera</button></div>
-<p id="cameraStatus" class="muted">Browser camera is used, so this works on cloud deployment as well as local Windows.</p>
+<p id="cameraStatus" class="muted">Browser camera mode works on cloud deployment and local Windows. HTTPS or localhost is required by most browsers.</p>
 </div>
 <div class="card"><h2>📊 Live Traffic Metrics</h2><div class="stats">
 <div class="stat">Cars<strong id="cars">{{state.cars}}</strong></div><div class="stat">Bikes<strong id="bikes">{{state.bikes}}</strong></div><div class="stat">Buses<strong id="buses">{{state.buses}}</strong></div><div class="stat">Trucks<strong id="trucks">{{state.trucks}}</strong></div>
-<div class="stat">Total<strong id="traffic">{{state.traffic}}</strong></div><div class="stat">Pedestrians<strong id="pedestrians">{{state.pedestrians}}</strong></div><div class="stat">Speed<strong id="speed">{{state.speed}}</strong></div><div class="stat">Density<strong id="density">{{state.density}}</strong></div>
+<div class="stat">Total<strong id="traffic">{{state.traffic}}</strong></div><div class="stat">Pedestrians<strong id="pedestrians">{{state.pedestrians}}</strong></div><div class="stat">Approx. Speed<strong id="speed">{{state.speed}}</strong></div><div class="stat">Density<strong id="density">{{state.density}}</strong></div>
 </div></div>
 <div class="card"><h2>🧭 Four-Direction Adaptive Control</h2><div class="directions" id="directions"></div><p><b>Active direction:</b> <span id="active">{{state.active_direction}}</span> &nbsp; <b>Green time:</b> <span id="green_time">{{state.green_time}}</span>s</p></div>
 </div>
 <div>
 <div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
-<div class="card"><h2>🚑 Emergency Priority</h2><div id="emergency" class="emergency">No emergency priority active</div><button onclick="toggleEmergency()">Toggle Demo Emergency Priority</button><p class="muted">The supplied general YOLO model does not reliably identify ambulance/fire-truck classes. This control is for demonstrating the priority logic.</p></div>
-<div class="card"><h2>🤖 ML Signal Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">ML prediction is kept separate from the live adaptive controller so both approaches can be demonstrated honestly.</p></div>
+<div class="card"><h2>🚑 Emergency Priority</h2><div id="emergency" class="emergency">No emergency priority active</div><button onclick="toggleEmergency()">Toggle Demo Emergency Priority</button><p class="muted">Manual demonstration only. The bundled general YOLO model does not reliably identify ambulance/fire-truck classes, and ordinary trucks are not treated as emergency vehicles.</p></div>
+<div class="card"><h2>🤖 ML Signal Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Random Forest prediction is demonstrated separately; the live controller uses YOLO traffic counts and adaptive priority.</p></div>
 </div></div>
 <div class="card"><h2>🧪 Manual ML Prediction</h2><form action="{{url_for('predict')}}" method="post">
 <div class="row"><div><label>Location ID</label><input type="number" name="location_id" value="1" required></div><div><label>Traffic Volume</label><input type="number" step="0.01" name="traffic_volume" value="10" required></div><div><label>Average Vehicle Speed</label><input type="number" step="0.01" name="avg_vehicle_speed" value="30" required></div><div><label>Cars</label><input type="number" name="vehicle_count_cars" value="5" required></div><div><label>Trucks</label><input type="number" name="vehicle_count_trucks" value="1" required></div><div><label>Bikes</label><input type="number" name="vehicle_count_bikes" value="2" required></div><div><label>Weather</label><select name="weather_condition"><option>Sunny</option><option>Cloudy</option><option>Rainy</option><option>Foggy</option><option>Windy</option></select></div><div><label>Temperature</label><input type="number" step="0.01" name="temperature" value="25" required></div><div><label>Humidity</label><input type="number" step="0.01" name="humidity" value="60" required></div><div><label>Accident</label><select name="accident_reported"><option value="0">No</option><option value="1">Yes</option></select></div><div><label>Hour</label><input type="number" name="hour" value="12" min="0" max="23" required></div><div><label>Minute</label><input type="number" name="minute" value="0" min="0" max="59" required></div><div><label>Day</label><input type="number" name="day" value="1" min="1" max="31" required></div><div><label>Month</label><input type="number" name="month" value="1" min="1" max="12" required></div><div><label>Emergency</label><select name="emergency_detected"><option value="0">No</option><option value="1">Yes</option></select></div></div><button type="submit">🚦 Predict Signal</button></form></div>
 </div>
 <script>
-let emergency=false;\nlet cameraStream=null;\nlet captureTimer=null;\nlet processing=false;
-function render(s){
-['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','active','green_time','updated','ml'].forEach(k=>{let e=document.getElementById(k);if(e&&s[k]!==undefined)e.textContent=s[k]});
-let sig=document.getElementById('signal');sig.textContent=(s.signal==='Green'?'🟢 ':s.signal==='Yellow'?'🟡 ':'🔴 ')+s.signal;sig.className='signal '+s.signal.toLowerCase();document.getElementById('message').textContent=s.signal_message;
-let em=document.getElementById('emergency');em.textContent=s.emergency?'🚑 Emergency priority active — GREEN priority':'No emergency priority active';em.className='emergency '+(s.emergency?'priority':'');
-let box=document.getElementById('directions');box.innerHTML='';let max=Math.max(1,...Object.values(s.directions||{}));for(const [d,n] of Object.entries(s.directions||{})){let div=document.createElement('div');div.className='direction '+(d===s.active_direction?'active':'');div.innerHTML='<b>'+d+'</b><br>'+n+' vehicles<div class="bar"><span style="width:'+Math.min(100,n/max*100)+'%"></span></div>'+(d===s.active_direction?'<small>GREEN</small>':'<small>RED</small>');box.appendChild(div)} }
-async function refresh(){try{let r=await fetch('/api/state');render(await r.json())}catch(e){}}setInterval(refresh,1500);refresh();
+let emergency = false;
+let cameraStream = null;
+let captureTimer = null;
+let processing = false;
 
-async function startCamera(){
-  try{
-    if(cameraStream) return;
-    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:960},height:{ideal:540}},audio:false});
-    document.getElementById('cameraVideo').srcObject=cameraStream;
-    document.getElementById('cameraStatus').textContent='Camera connected. AI processing is running.';
-    captureTimer=setInterval(sendFrame,700);
-  }catch(e){
-    document.getElementById('cameraStatus').textContent='Camera permission/error: '+e.message;
+function render(s) {
+  ['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','active','green_time','updated','ml']
+    .forEach(k => {
+      const e = document.getElementById(k);
+      if (e && s[k] !== undefined) e.textContent = s[k];
+    });
+
+  const sig = document.getElementById('signal');
+  sig.textContent = (s.signal === 'Green' ? '🟢 ' : s.signal === 'Yellow' ? '🟡 ' : '🔴 ') + s.signal;
+  sig.className = 'signal ' + s.signal.toLowerCase();
+
+  document.getElementById('message').textContent = s.signal_message;
+
+  const em = document.getElementById('emergency');
+  em.textContent = s.emergency ? '🚑 Emergency priority active — GREEN priority' : 'No emergency priority active';
+  em.className = 'emergency ' + (s.emergency ? 'priority' : '');
+
+  const box = document.getElementById('directions');
+  box.innerHTML = '';
+  const max = Math.max(1, ...Object.values(s.directions || {}));
+
+  for (const [d, n] of Object.entries(s.directions || {})) {
+    const div = document.createElement('div');
+    div.className = 'direction ' + (d === s.active_direction ? 'active' : '');
+    div.innerHTML =
+      '<b>' + d + '</b><br>' + n + ' vehicles' +
+      '<div class="bar"><span style="width:' + Math.min(100, n / max * 100) + '%"></span></div>' +
+      (d === s.active_direction ? '<small>GREEN</small>' : '<small>RED</small>');
+    box.appendChild(div);
   }
 }
-function stopCamera(){
-  if(captureTimer){clearInterval(captureTimer);captureTimer=null}
-  if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}
-  document.getElementById('cameraVideo').srcObject=null;
-  document.getElementById('cameraStatus').textContent='Camera stopped.';
+
+async function refresh() {
+  try {
+    const r = await fetch('/api/state', {cache:'no-store'});
+    render(await r.json());
+  } catch (e) {}
 }
-async function sendFrame(){
-  if(processing || !cameraStream) return;
-  const video=document.getElementById('cameraVideo'), canvas=document.getElementById('captureCanvas');
-  if(video.readyState<2) return;
-  canvas.width=640; canvas.height=Math.round(640*video.videoHeight/video.videoWidth)||360;
-  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-  processing=true;
-  try{
-    const r=await fetch('/api/frame',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:canvas.toDataURL('image/jpeg',0.72)})});
-    const data=await r.json();
-    if(data.error){document.getElementById('cameraStatus').textContent=data.error}
-    else{document.getElementById('annotated').src=data.image;render(data)}
-  }catch(e){document.getElementById('cameraStatus').textContent='Server connection error: '+e.message}
-  finally{processing=false}
+setInterval(refresh, 1500);
+refresh();
+
+async function startCamera() {
+  try {
+    if (cameraStream) return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Browser camera API is unavailable. Use HTTPS or localhost.');
+    }
+
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {facingMode: 'environment', width: {ideal: 960}, height: {ideal: 540}},
+      audio: false
+    });
+
+    const video = document.getElementById('cameraVideo');
+    video.srcObject = cameraStream;
+    await video.play();
+
+    document.getElementById('cameraStatus').textContent = 'Camera connected. AI processing is running.';
+    captureTimer = setInterval(sendFrame, 800);
+    await sendFrame();
+  } catch (e) {
+    document.getElementById('cameraStatus').textContent = 'Camera permission/error: ' + e.message;
+  }
 }
-window.addEventListener('beforeunload',stopCamera);
-async function toggleEmergency(){emergency=!emergency;let r=await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emergency})});render(await r.json())}
+
+async function stopCamera() {
+  if (captureTimer) {
+    clearInterval(captureTimer);
+    captureTimer = null;
+  }
+
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+
+  document.getElementById('cameraVideo').srcObject = null;
+
+  try {
+    await fetch('/api/camera/reset', {method:'POST'});
+    await refresh();
+  } catch (e) {}
+
+  document.getElementById('cameraStatus').textContent = 'Camera stopped.';
+}
+
+async function sendFrame() {
+  if (processing || !cameraStream) return;
+
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('captureCanvas');
+
+  if (video.readyState < 2 || !video.videoWidth) return;
+
+  canvas.width = 640;
+  canvas.height = Math.max(360, Math.round(640 * video.videoHeight / video.videoWidth));
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  processing = true;
+
+  try {
+    const r = await fetch('/api/frame', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.68)})
+    });
+
+    const data = await r.json();
+
+    if (!r.ok || data.error) {
+      throw new Error(data.error || 'Frame processing failed');
+    }
+
+    document.getElementById('annotated').src = data.image;
+    render(data);
+  } catch (e) {
+    document.getElementById('cameraStatus').textContent = 'AI processing error: ' + e.message;
+  } finally {
+    processing = false;
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+});
+
+async function toggleEmergency() {
+  emergency = !emergency;
+  try {
+    const r = await fetch('/api/control', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({emergency})
+    });
+    render(await r.json());
+  } catch (e) {}
+}
 </script>
-</body></html>
+</body>
+</html>
