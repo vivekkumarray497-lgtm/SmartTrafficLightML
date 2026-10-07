@@ -94,7 +94,7 @@ def update_state(metrics):
             "green_time": active_info["green_time"] if active_info["signal"] == "Green" else 0,
             "signal": "Green" if active_info["signal"] == "Green" else "Red",
             "signal_message": (
-                f"EMERGENCY PRIORITY - {metrics.get("emergency_type", "Emergency").upper()} | {active} GREEN"
+                f"EMERGENCY PRIORITY - {metrics.get('emergency_type', 'Emergency').upper()} | {active} GREEN"
                 if metrics["emergency"]
                 else f"{active} direction selected by adaptive traffic priority"
             ),
@@ -116,7 +116,6 @@ def detect_frame(frame):
 
 def reset_state():
     with state_lock:
-        emergency = traffic_data["emergency"]
         traffic_data.update({
             "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "traffic": 0,
             "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
@@ -125,7 +124,9 @@ def reset_state():
             "active_direction": "North", "green_time": 15,
             "signal": "Green",
             "signal_message": "No traffic - GREEN LIGHT",
-            "emergency": emergency,
+            "emergency": False,
+            "emergency_type": "",
+            "emergency_direction": "",
             "updated_at": "Camera stopped"
         })
 
