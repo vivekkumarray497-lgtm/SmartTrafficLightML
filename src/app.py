@@ -214,7 +214,7 @@ def api_frame():
         if "," in image_data:
             image_data = image_data.split(",", 1)[1]
         raw = base64.b64decode(image_data, validate=True)
-        frame = cv2.imdecode(__import__("numpy").frombuffer(raw, dtype=__import__("numpy").uint8), cv2.IMREAD_COLOR)
+        frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise ValueError("Invalid JPEG frame")
 
