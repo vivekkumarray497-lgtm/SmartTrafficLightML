@@ -5,17 +5,20 @@ from ultralytics import YOLOWorld
 
 class EmergencyDetector:
     """
-    Two-stage emergency vehicle detector using YOLO-World.
+    Emergency vehicle detector using YOLO-World.
 
-    Only ambulance and fire truck are accepted. Stronger confidence,
-    multi-frame confirmation, and overlap checks against the normal
-    traffic detector reduce buses/cars being reported as emergencies.
+    The detector compares emergency prompts against common road-vehicle
+    prompts (bus/truck/car/van) and confirms the same emergency type and
+    direction across multiple frames. Only ambulance and fire truck can
+    trigger emergency priority.
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
 
-    def __init__(self, model_path=None, confidence=0.55, consecutive_required=3, miss_tolerance=1):
-        self.model_path = model_path or os.environ.get("EMERGENCY_MODEL_PATH", "yolov8s-world.pt")
+    def __init__(self, model_path=None, confidence=0.25, consecutive_required=2, miss_tolerance=2):
+        self.model_path = model_path or os.environ.get(
+            "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
+        )
         self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
         self.consecutive_required = max(
             1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
@@ -27,6 +30,7 @@ class EmergencyDetector:
         self.available = False
         self.error = ""
         self.lock = threading.Lock()
+
         self._streak = 0
         self._misses = 0
         self._last_type = ""
@@ -36,14 +40,25 @@ class EmergencyDetector:
     def _load(self):
         if self.model is not None or self.error:
             return
+
         with self.lock:
             if self.model is not None or self.error:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
+                # Keep ordinary vehicle classes in the same vocabulary so an
+                # ambulance is compared against bus/truck/car/van instead of
+                # being judged in isolation.
                 self.model.set_classes([
-                    "ambulance emergency vehicle",
-                    "fire truck fire engine emergency vehicle",
+                    "ambulance",
+                    "emergency ambulance",
+                    "ambulance van",
+                    "fire truck",
+                    "fire engine",
+                    "bus",
+                    "truck",
+                    "car",
+                    "van",
                 ])
                 self.available = True
             except Exception as exc:
@@ -73,6 +88,23 @@ class EmergencyDetector:
         union = area_a + area_b - intersection
         return intersection / union if union else 0.0
 
+    @staticmethod
+    def _label(raw_label):
+        label = str(raw_label).lower().strip()
+        if "ambulance" in label:
+            return "ambulance"
+        if "fire truck" in label or "fire engine" in label:
+            return "fire truck"
+        if "bus" in label:
+            return "bus"
+        if "truck" in label:
+            return "truck"
+        if "van" in label:
+            return "van"
+        if "car" in label:
+            return "car"
+        return ""
+
     def _empty(self):
         return {
             "detected": False,
@@ -82,63 +114,103 @@ class EmergencyDetector:
             "detections": [],
         }
 
+    def _predict(self, image):
+        return self.model.predict(
+            image,
+            conf=self.confidence,
+            iou=0.45,
+            imgsz=640,
+            verbose=False,
+        )[0]
+
     def detect(self, frame, traffic_boxes=None):
         self._load()
         if not self.available:
             return self._empty()
 
         try:
-            result = self.model.predict(
-                frame,
-                conf=self.confidence,
-                iou=0.45,
-                imgsz=640,
-                verbose=False,
-            )[0]
-
-            detections = []
             height, width = frame.shape[:2]
             traffic_boxes = traffic_boxes or []
+            candidates = []
 
-            if result.boxes is not None:
+            # Full-frame inference.
+            result = self._predict(frame)
+            results_to_parse = [(result, 0, 0)]
+
+            # Also inspect each vehicle crop. This helps when the ambulance is
+            # small in a wide traffic-camera frame.
+            for item in traffic_boxes:
+                x1, y1, x2, y2 = item["box"]
+                pad_x = max(8, int((x2 - x1) * 0.15))
+                pad_y = max(8, int((y2 - y1) * 0.15))
+                cx1 = max(0, x1 - pad_x)
+                cy1 = max(0, y1 - pad_y)
+                cx2 = min(width, x2 + pad_x)
+                cy2 = min(height, y2 + pad_y)
+                if cx2 - cx1 >= 40 and cy2 - cy1 >= 40:
+                    crop = frame[cy1:cy2, cx1:cx2]
+                    crop_result = self._predict(crop)
+                    results_to_parse.append((crop_result, cx1, cy1))
+
+            for result, ox, oy in results_to_parse:
+                if result.boxes is None:
+                    continue
+
                 names = result.names
+                parsed = []
                 for box in result.boxes:
                     confidence = float(box.conf[0])
                     class_id = int(box.cls[0])
-                    raw_label = str(names[class_id]).lower().strip()
-
-                    if raw_label.startswith("ambulance"):
-                        label = "ambulance"
-                    elif raw_label.startswith("fire truck") or raw_label.startswith("fire engine"):
-                        label = "fire truck"
-                    else:
+                    raw_label = str(names[class_id])
+                    label = self._label(raw_label)
+                    if not label:
                         continue
 
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    candidate_box = [x1, y1, x2, y2]
+                    box_xyxy = [x1 + ox, y1 + oy, x2 + ox, y2 + oy]
+                    parsed.append((label, confidence, box_xyxy))
 
-                    # A normal COCO detector frequently calls an ordinary bus a
-                    # bus. Reject an emergency candidate that substantially
-                    # overlaps a bus unless its emergency confidence is very high.
-                    overlaps_bus = any(
-                        item["class_id"] == 5 and self._iou(candidate_box, item["box"]) >= 0.45
-                        for item in traffic_boxes
-                    )
-                    if overlaps_bus and confidence < 0.78:
+                # For each emergency candidate, compare it with the strongest
+                # ordinary-vehicle score in the same prediction/crop.
+                ordinary = [p for p in parsed if p[0] not in self.EMERGENCY_LABELS]
+                for label, confidence, candidate_box in parsed:
+                    if label not in self.EMERGENCY_LABELS:
                         continue
 
-                    cx = (x1 + x2) / 2
-                    cy = (y1 + y2) / 2
+                    competing = [
+                        score for other_label, score, other_box in ordinary
+                        if self._iou(candidate_box, other_box) >= 0.20
+                    ]
+                    strongest_ordinary = max(competing, default=0.0)
+
+                    # Emergency class must beat the ordinary vehicle class by
+                    # a small margin. This is especially useful for buses.
+                    if strongest_ordinary > 0 and confidence < strongest_ordinary + 0.03:
+                        continue
+
+                    # If the normal detector says this exact region is a bus,
+                    # require a much stronger emergency score.
+                    bus_overlap = any(
+                        item["class_id"] == 5
+                        and self._iou(candidate_box, item["box"]) >= 0.35
+                        for item in traffic_boxes
+                    )
+                    if bus_overlap and confidence < 0.72:
+                        continue
+
+                    bx1, by1, bx2, by2 = candidate_box
+                    cx = (bx1 + bx2) / 2
+                    cy = (by1 + by2) / 2
                     direction = self._direction(cx, cy, width, height)
 
-                    detections.append({
+                    candidates.append({
                         "label": label,
                         "confidence": confidence,
                         "direction": direction,
                         "box": candidate_box,
                     })
 
-            if not detections:
+            if not candidates:
                 self._misses += 1
                 if self._misses <= self.miss_tolerance and self._streak >= self.consecutive_required:
                     return {
@@ -155,10 +227,13 @@ class EmergencyDetector:
                 self._last_confidence = 0.0
                 return self._empty()
 
+            best = max(candidates, key=lambda item: item["confidence"])
             self._misses = 0
-            best = max(detections, key=lambda item: item["confidence"])
 
-            if best["label"] == self._last_type and best["direction"] == self._last_direction:
+            if (
+                best["label"] == self._last_type
+                and best["direction"] == self._last_direction
+            ):
                 self._streak += 1
             else:
                 self._streak = 1
@@ -173,7 +248,7 @@ class EmergencyDetector:
                 "type": best["label"] if confirmed else "",
                 "direction": best["direction"] if confirmed else "",
                 "confidence": best["confidence"] if confirmed else 0.0,
-                "detections": detections,
+                "detections": candidates,
             }
 
         except Exception as exc:
