@@ -47,7 +47,7 @@ traffic_data = {
     "directions": {d: 0 for d in DIRECTIONS},
     "active_direction": "North", "green_time": 15,
     "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
-    "ml_prediction": "Green", "updated_at": "Not started"
+    "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": ""
 }
 
 
@@ -70,7 +70,8 @@ def update_state(metrics):
     adaptive = controller.decide(
         metrics["directions"],
         metrics["pedestrians"],
-        metrics["emergency"]
+        metrics["emergency"],
+        metrics.get("emergency_direction")
     )
     active = adaptive["active_direction"]
     active_info = adaptive[active]
@@ -93,10 +94,12 @@ def update_state(metrics):
             "green_time": active_info["green_time"] if active_info["signal"] == "Green" else 0,
             "signal": "Green" if active_info["signal"] == "Green" else "Red",
             "signal_message": (
-                "EMERGENCY PRIORITY - GREEN LIGHT"
+                f"EMERGENCY PRIORITY - {metrics.get("emergency_type", "Emergency").upper()} | {active} GREEN"
                 if metrics["emergency"]
                 else f"{active} direction selected by adaptive traffic priority"
             ),
+            "emergency_type": metrics.get("emergency_type", ""),
+            "emergency_direction": metrics.get("emergency_direction", ""),
             "updated_at": datetime.now().strftime("%H:%M:%S")
         })
         signal = traffic_data["signal"]
@@ -238,6 +241,17 @@ def api_camera_reset():
 def api_control():
     payload = request.get_json(silent=True) or {}
     emergency = bool(payload.get("emergency", False))
+    emergency_type = str(payload.get("emergency_type", "")).strip().lower()
+    emergency_direction = str(payload.get("emergency_direction", "")).strip()
+
+    if emergency:
+        if emergency_type not in {"ambulance", "fire_truck"}:
+            return jsonify({"error": "Emergency priority is only available for Ambulance or Fire Truck."}), 400
+        if emergency_direction not in DIRECTIONS:
+            return jsonify({"error": "Please select the emergency vehicle direction."}), 400
+    else:
+        emergency_type = ""
+        emergency_direction = ""
 
     with state_lock:
         metrics = {
@@ -252,12 +266,13 @@ def api_control():
             "queue_length": traffic_data["queue_length"],
             "avg_waiting_time": traffic_data["avg_waiting_time"],
             "directions": dict(traffic_data["directions"]),
-            "emergency": emergency
+            "emergency": emergency,
+            "emergency_type": emergency_type,
+            "emergency_direction": emergency_direction
         }
 
     update_state(metrics)
     return jsonify(current_state())
-
 
 @app.route("/predict", methods=["POST"])
 def predict():
