@@ -50,7 +50,7 @@ traffic_data = {
     "directions": {d: 0 for d in DIRECTIONS},
     "active_direction": "North", "green_time": 15,
     "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
-    "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": ""
+    "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0
 }
 
 
@@ -133,6 +133,7 @@ def reset_state():
             "emergency": False,
             "emergency_type": "",
             "emergency_direction": "",
+            "emergency_confidence": 0.0,
             "updated_at": "Camera stopped"
         })
 
