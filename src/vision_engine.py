@@ -81,7 +81,10 @@ class VisionEngine:
         emergency_confidence = 0.0
 
         if self.emergency_detector is not None:
-            emergency_info = self.emergency_detector.detect(frame)
+            # Run emergency detection on a clean frame so traffic overlays do not
+            # become visual noise for the emergency model.
+            emergency_frame = frame.copy()
+            emergency_info = self.emergency_detector.detect(emergency_frame)
             emergency = emergency_info["detected"]
             emergency_type = emergency_info["type"]
             emergency_direction = emergency_info["direction"]
