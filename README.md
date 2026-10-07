@@ -75,7 +75,9 @@ The included `Procfile` uses this command.
 
 ## Accuracy notes
 
-The bundled `yolo11n.pt` is a general YOLO/COCO model. It does **not** reliably identify ambulance or fire-engine classes. Therefore ordinary trucks are not treated as emergency vehicles. Emergency priority is currently a manual demonstration. A production system should use a custom emergency-vehicle dataset/model.
+The bundled `yolo11n.pt` is a general YOLO/COCO model for ordinary traffic detection. It does **not** provide reliable ambulance or fire-engine classes, so ordinary trucks are never treated as emergency vehicles.
+
+The live emergency detector uses YOLO-World with an emergency-only vocabulary for **ambulance** and **fire truck**. Detection requires consecutive confirmation before automatic emergency priority is activated. For a production-grade system, replace the zero-shot model with a custom-trained emergency-vehicle detector and validate it extensively before deployment.
 
 Camera speed is approximate unless the camera is calibrated and should not be used for enforcement.
 
