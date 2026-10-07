@@ -28,7 +28,7 @@
 </div>
 <div>
 <div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
-<div class="card emergency-panel"><h2>🚑 Emergency Priority Control</h2><div id="emergency" class="emergency">No emergency priority active</div><div class="row"><div><label>Emergency Vehicle</label><select id="emergencyType"><option value="ambulance">🚑 Ambulance</option><option value="fire_truck">🚒 Fire Truck</option></select></div><div><label>Approaching Direction</label><select id="emergencyDirection"><option>North</option><option>South</option><option>East</option><option>West</option></select></div></div><div class="toolbar"><button class="danger" onclick="activateEmergency()">🚨 Activate Emergency Priority</button><button class="secondary" onclick="clearEmergency()">Clear Priority</button></div><p class="muted">Manual/demo control. Selected ambulance or fire-truck direction gets GREEN priority; other directions remain RED. Police vehicles are not included.</p></div>
+<div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted">The system automatically detects Ambulance and Fire Truck from the camera and activates direction-aware GREEN priority. Police vehicles are not treated as emergency vehicles.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
 <div class="card"><h2>🤖 ML Signal Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Random Forest prediction is demonstrated separately; the live controller uses YOLO traffic counts and adaptive priority.</p></div>
 </div></div>
 <div class="card"><h2>🧪 Manual ML Prediction</h2><form action="{{url_for('predict')}}" method="post">
@@ -54,8 +54,11 @@ function render(s) {
   document.getElementById('message').textContent = s.signal_message;
 
   const em = document.getElementById('emergency');
-  em.textContent = s.emergency ? ('🚨 ' + (s.emergency_type === 'fire_truck' ? 'FIRE TRUCK' : 'AMBULANCE') + ' PRIORITY — ' + s.emergency_direction + ' GREEN') : 'No emergency priority active';
+  em.textContent = s.emergency ? ('🚨 ' + (s.emergency_type === 'fire_truck' ? 'FIRE TRUCK' : 'AMBULANCE') + ' DETECTED — AUTOMATIC PRIORITY ACTIVE') : '🟢 Monitoring for Ambulance / Fire Truck';
   em.className = 'emergency ' + (s.emergency ? 'priority' : '');
+  document.getElementById('emergencyType').textContent = s.emergency_type || 'None';
+  document.getElementById('emergencyDirection').textContent = s.emergency_direction || '—';
+  document.getElementById('emergencyConfidence').textContent = ((s.emergency_confidence || 0) * 100).toFixed(0) + '%';
 
   const box = document.getElementById('directions');
   box.innerHTML = '';
@@ -167,16 +170,15 @@ window.addEventListener('beforeunload', () => {
   if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
 });
 
-async function toggleEmergency() {
-  emergency = !emergency;
+async function clearEmergency() {
   try {
     const r = await fetch('/api/control', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({emergency})
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({emergency:false})
     });
     render(await r.json());
-  } catch (e) {}
+  } catch(e) {}
 }
 </script>
 </body>
