@@ -1,0 +1,97 @@
+name: Runtime Smoke Test
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python files
+        run: |
+          python -m compileall -q run.py src
+
+      - name: Flask/API smoke test
+        env:
+          PYTHONPATH: src
+        run: |
+          python - <<'PY'
+          import base64
+          import io
+          import numpy as np
+          from PIL import Image
+
+          import app
+
+          client = app.app.test_client()
+
+          health = client.get("/api/health")
+          assert health.status_code == 200, health.data.decode()
+          health_data = health.get_json()
+          assert health_data["status"] == "ok"
+
+          state = client.get("/api/state")
+          assert state.status_code == 200, state.data.decode()
+          state_data = state.get_json()
+          assert set(["North", "South", "East", "West"]).issubset(state_data["directions"])
+
+          reset = client.post("/api/camera/reset")
+          assert reset.status_code == 200, reset.data.decode()
+
+          invalid = client.post(
+              "/api/control",
+              json={"emergency": True, "emergency_type": "police", "emergency_direction": "North"},
+          )
+          assert invalid.status_code == 400, invalid.data.decode()
+
+          # Exercise /api/frame without requiring a real camera or GPU inference.
+          original_process = app.vision.process
+
+          def fake_process(frame):
+              return {
+                  "cars": 1, "bikes": 0, "buses": 0, "trucks": 0,
+                  "total_vehicles": 1,
+                  "directions": {"North": 1, "South": 0, "East": 0, "West": 0},
+                  "pedestrians": 0, "avg_speed": 20.0, "density": "LOW",
+                  "queue_length": 1, "avg_waiting_time": 14.0,
+                  "emergency": False, "emergency_type": "",
+                  "emergency_direction": "", "emergency_confidence": 0.0,
+              }, frame
+
+          app.vision.process = fake_process
+
+          image = Image.new("RGB", (320, 180), "white")
+          buf = io.BytesIO()
+          image.save(buf, format="JPEG")
+          payload = base64.b64encode(buf.getvalue()).decode("ascii")
+
+          frame = client.post("/api/frame", json={"image": payload})
+          assert frame.status_code == 200, frame.data.decode()
+          assert frame.get_json()["traffic"] == 1
+
+          app.vision.process = original_process
+
+          print("Runtime smoke test: PASS")
+          print("Health:", health_data)
+          print("State/API/frame/control checks: PASS")
+          PY
+
+      - name: Gunicorn startup check
+        run: |
+          timeout 15s gunicorn --workers 1 --threads 2 --bind 127.0.0.1:5000 --timeout 30 run:app || test $? -eq 124
