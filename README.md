@@ -89,7 +89,7 @@ The live camera now runs a second YOLO-World detector configured with the custom
 - **ambulance**
 - **fire truck**
 
-YOLO-World supports custom text classes with `set_classes()`, so the application can detect these categories without requiring a bundled custom-trained checkpoint. urlUltralytics YOLO-World documentationhttps://docs.ultralytics.com/models/yolo-world
+YOLO-World supports custom text classes with `set_classes()`, so the application can detect these categories without requiring a bundled custom-trained checkpoint. [Ultralytics YOLO-World documentation](https://docs.ultralytics.com/models/yolo-world)
 
 Detection flow:
 
@@ -115,6 +115,6 @@ EMERGENCY_CONF=0.38
 EMERGENCY_CONSECUTIVE=2
 ```
 
-For a higher-accuracy production system, replace the zero-shot YOLO-World model with a custom-trained ambulance/fire-truck detector and set `EMERGENCY_MODEL_PATH` to that `.pt` file. Ultralytics recommends custom labeled data and validation when adapting detection to a specific deployment scenario. urlUltralytics custom detection training guidehttps://docs.ultralytics.com/tasks/detect
+For a higher-accuracy production system, replace the zero-shot YOLO-World model with a custom-trained ambulance/fire-truck detector and set `EMERGENCY_MODEL_PATH` to that `.pt` file. Ultralytics recommends custom labeled data and validation when adapting detection to a specific deployment scenario. [Ultralytics custom detection training guide](https://docs.ultralytics.com/tasks/detect)
 
 **Important:** This is an academic prototype. Emergency detection should not be used as the sole basis for real-world traffic-signal or safety decisions without extensive validation, camera calibration, and fail-safe controls.
