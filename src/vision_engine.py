@@ -1,4 +1,4 @@
-import cv2, time, math
+import cv2, time, math\nimport numpy as np
 from collections import defaultdict, deque
 
 class VisionEngine:
@@ -31,5 +31,5 @@ class VisionEngine:
         total=sum(counts.values()); avg_speed=round(sum(speeds)/len(speeds),1) if speeds else 0.0
         density='LOW' if total<6 else 'MEDIUM' if total<15 else 'HIGH' if total<30 else 'VERY HIGH'
         # Demo-friendly emergency heuristic: only explicit custom classes can be added later; normal trucks are NOT emergencies.
-        metrics={**counts,'total_vehicles':total,'directions':directions,'pedestrians':pedestrians,'avg_speed':avg_speed,'density':density,'queue_length':sum(v for v in directions.values() if v>0),'avg_waiting_time':round(max(0,(30-avg_speed)*1.4),1),'emergency':emergency}
+        metrics={**counts,'total_vehicles':total,'directions':directions,'pedestrians':pedestrians,'avg_speed':avg_speed,'density':density,'queue_length':total,'avg_waiting_time':round(max(0,(30-avg_speed)*1.4),1),'emergency':emergency}
         return metrics,frame
