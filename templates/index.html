@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Smart Traffic Light ML</title>
+<title>Smart Traffic Control Center</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f3f6fa;color:#172033}header{background:#111827;color:#fff;padding:20px;text-align:center}header h1{margin:0 0 6px}.container{width:94%;max-width:1250px;margin:22px auto}.grid{display:grid;grid-template-columns:2fr 1fr;gap:18px}.card{background:#fff;padding:18px;border-radius:14px;box-shadow:0 3px 14px rgba(0,0,0,.08);margin-bottom:18px}.camera{width:100%;background:#111;border-radius:10px;display:block}.signal{text-align:center;font-size:30px;font-weight:bold;padding:16px;border-radius:12px}.green{background:#dcfce7;color:#166534}.red{background:#fee2e2;color:#991b1b}.yellow{background:#fef3c7;color:#92400e}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{background:#eef2ff;padding:15px;text-align:center;border-radius:10px}.stat strong{display:block;font-size:25px;margin-top:5px}.directions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.direction{padding:14px;border-radius:10px;background:#f1f5f9;text-align:center}.direction.active{background:#dcfce7;border:2px solid #16a34a}.bar{height:9px;background:#e5e7eb;border-radius:10px;overflow:hidden;margin-top:7px}.bar span{display:block;height:100%;background:#2563eb;width:0}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{display:block;margin-top:10px;font-weight:bold}input,select{width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:7px}button{margin-top:15px;padding:11px 18px;background:#2563eb;color:#fff;border:0;border-radius:8px;cursor:pointer}.emergency{padding:12px;border-radius:9px;background:#ecfdf5;color:#166534;font-weight:bold}.priority{background:#fee2e2;color:#991b1b}.muted{color:#64748b;font-size:14px}.error{background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px}@media(max-width:900px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.directions{grid-template-columns:repeat(2,1fr)}}
-</style>
+.status-pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);padding:9px 13px;border-radius:999px;font-size:13px}.emergency-panel{border:2px solid #fecaca;background:#fff7f7}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.danger{background:#b91c1c}.secondary{background:#475569}.tag{display:inline-block;padding:4px 8px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700}@media(max-width:600px){header{display:block}.status-pill{display:inline-block;margin-top:10px}} </style>
 </head>
 <body>
-<header><h1>🚦 Smart Traffic Light Management System</h1><div>Machine Learning + YOLO Based Adaptive Traffic Control</div></header>
-<div class="container">
+<header><div><h1>🚦 Smart Traffic Control Center</h1><div>AI + YOLO Based Adaptive Traffic Signal Management</div></div><div class="status-pill">● SYSTEM ONLINE &nbsp;|&nbsp; ML CONTROL</div></header>
+<div class="container"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="tag">LIVE MONITORING</span><span class="tag">4-DIRECTION CONTROL</span><span class="tag">EMERGENCY PRIORITY</span></div>
 {% if state.error %}<div class="error">{{state.error}}</div>{% endif %}
 <div class="grid">
 <div>
@@ -28,7 +28,7 @@
 </div>
 <div>
 <div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
-<div class="card"><h2>🚑 Emergency Priority</h2><div id="emergency" class="emergency">No emergency priority active</div><button onclick="toggleEmergency()">Toggle Demo Emergency Priority</button><p class="muted">Manual demonstration only. The bundled general YOLO model does not reliably identify ambulance/fire-truck classes, and ordinary trucks are not treated as emergency vehicles.</p></div>
+<div class="card emergency-panel"><h2>🚑 Emergency Priority Control</h2><div id="emergency" class="emergency">No emergency priority active</div><div class="row"><div><label>Emergency Vehicle</label><select id="emergencyType"><option value="ambulance">🚑 Ambulance</option><option value="fire_truck">🚒 Fire Truck</option></select></div><div><label>Approaching Direction</label><select id="emergencyDirection"><option>North</option><option>South</option><option>East</option><option>West</option></select></div></div><div class="toolbar"><button class="danger" onclick="activateEmergency()">🚨 Activate Emergency Priority</button><button class="secondary" onclick="clearEmergency()">Clear Priority</button></div><p class="muted">Manual/demo control. Selected ambulance or fire-truck direction gets GREEN priority; other directions remain RED. Police vehicles are not included.</p></div>
 <div class="card"><h2>🤖 ML Signal Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Random Forest prediction is demonstrated separately; the live controller uses YOLO traffic counts and adaptive priority.</p></div>
 </div></div>
 <div class="card"><h2>🧪 Manual ML Prediction</h2><form action="{{url_for('predict')}}" method="post">
@@ -54,7 +54,7 @@ function render(s) {
   document.getElementById('message').textContent = s.signal_message;
 
   const em = document.getElementById('emergency');
-  em.textContent = s.emergency ? '🚑 Emergency priority active — GREEN priority' : 'No emergency priority active';
+  em.textContent = s.emergency ? ('🚨 ' + (s.emergency_type === 'fire_truck' ? 'FIRE TRUCK' : 'AMBULANCE') + ' PRIORITY — ' + s.emergency_direction + ' GREEN') : 'No emergency priority active';
   em.className = 'emergency ' + (s.emergency ? 'priority' : '');
 
   const box = document.getElementById('directions');
