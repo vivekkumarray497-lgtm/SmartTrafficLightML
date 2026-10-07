@@ -46,19 +46,20 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
-                # Keep ordinary vehicle classes in the same vocabulary so an
-                # ambulance is compared against bus/truck/car/van instead of
-                # being judged in isolation.
+                # IMPORTANT: this model is used only for emergency detection.
+                # Do not put bus/truck/car/van in the same vocabulary. A
+                # zero-shot model otherwise has to choose between ordinary and
+                # emergency labels and can turn an ambulance into "bus".
+                # Ordinary traffic classification is already handled by the
+                # main YOLO detector in VisionEngine.
                 self.model.set_classes([
                     "ambulance",
                     "emergency ambulance",
+                    "ambulance vehicle",
                     "ambulance van",
                     "fire truck",
                     "fire engine",
-                    "bus",
-                    "truck",
-                    "car",
-                    "van",
+                    "firefighting truck",
                 ])
                 self.available = True
             except Exception as exc:
@@ -170,32 +171,12 @@ class EmergencyDetector:
                     box_xyxy = [x1 + ox, y1 + oy, x2 + ox, y2 + oy]
                     parsed.append((label, confidence, box_xyxy))
 
-                # For each emergency candidate, compare it with the strongest
-                # ordinary-vehicle score in the same prediction/crop.
-                ordinary = [p for p in parsed if p[0] not in self.EMERGENCY_LABELS]
+                # Only emergency labels are present in the emergency model's
+                # vocabulary, so there is no "bus" label for it to prefer.
+                # The main YOLO detector may still call the same object a bus;
+                # that normal label must NOT cancel an emergency candidate.
                 for label, confidence, candidate_box in parsed:
                     if label not in self.EMERGENCY_LABELS:
-                        continue
-
-                    competing = [
-                        score for other_label, score, other_box in ordinary
-                        if self._iou(candidate_box, other_box) >= 0.20
-                    ]
-                    strongest_ordinary = max(competing, default=0.0)
-
-                    # Emergency class must beat the ordinary vehicle class by
-                    # a small margin. This is especially useful for buses.
-                    if strongest_ordinary > 0 and confidence < strongest_ordinary + 0.03:
-                        continue
-
-                    # If the normal detector says this exact region is a bus,
-                    # require a much stronger emergency score.
-                    bus_overlap = any(
-                        item["class_id"] == 5
-                        and self._iou(candidate_box, item["box"]) >= 0.35
-                        for item in traffic_boxes
-                    )
-                    if bus_overlap and confidence < 0.72:
                         continue
 
                     bx1, by1, bx2, by2 = candidate_box
