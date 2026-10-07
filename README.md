@@ -110,7 +110,7 @@ The emergency model is loaded lazily on the first camera frame, so normal applic
 Environment variables:
 
 ```text
-EMERGENCY_MODEL_PATH=yolov8s-world.pt
+EMERGENCY_MODEL_PATH=yolov8s-worldv2.pt
 EMERGENCY_CONF=0.38
 EMERGENCY_CONSECUTIVE=2
 ```
