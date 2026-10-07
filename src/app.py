@@ -4,6 +4,7 @@ import joblib
 import os
 import sys
 import cv2
+import numpy as np
 import threading
 import time
 from datetime import datetime
