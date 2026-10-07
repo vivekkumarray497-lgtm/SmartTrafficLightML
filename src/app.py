@@ -24,10 +24,12 @@ from signal_controller import get_signal_message
 from vision_engine import VisionEngine
 from adaptive_controller import AdaptiveController
 from analytics_store import AnalyticsStore
+from emergency_detector import EmergencyDetector
 
 model = joblib.load(MODEL_PATH)
 yolo_model = YOLO(YOLO_MODEL_PATH)
-vision = VisionEngine(yolo_model)
+emergency_detector = EmergencyDetector()
+vision = VisionEngine(yolo_model, emergency_detector)
 controller = AdaptiveController()
 analytics = AnalyticsStore(HISTORY_PATH)
 
@@ -90,6 +92,9 @@ def update_state(metrics):
             "queue_length": metrics["queue_length"],
             "avg_waiting_time": metrics["avg_waiting_time"],
             "emergency": metrics["emergency"],
+            "emergency_type": metrics.get("emergency_type", ""),
+            "emergency_direction": metrics.get("emergency_direction", ""),
+            "emergency_confidence": metrics.get("emergency_confidence", 0.0),
             "directions": dict(metrics["directions"]),
             "active_direction": active,
             "green_time": active_info["green_time"] if active_info["signal"] == "Green" else 0,
@@ -195,7 +200,9 @@ def api_health():
         "status": "ok",
         "server_camera": server_camera,
         "browser_camera": True,
-        "model": True
+        "model": True,
+        "emergency_detector": emergency_detector.available,
+        "emergency_detector_error": emergency_detector.error
     })
 
 
