@@ -1,46 +1,40 @@
 # Smart Traffic Light Management System Using Machine Learning
 
-A Flask web application combining **YOLO computer vision**, a supplied **Random Forest traffic-signal model**, and an **adaptive four-direction traffic controller**.
+A Flask-based smart traffic management application that combines computer vision, vehicle tracking, traffic-density analysis, and adaptive signal control to demonstrate how machine learning can support smarter intersections.
 
-## Features
+## Key Features
 
-- Browser camera support for local and cloud deployment
-- YOLO detection of cars, motorcycles/bikes, buses, trucks and pedestrians
-- Persistent object tracking and approximate speed estimation
-- Traffic density classification
-- North/South/East/West traffic estimation
-- Adaptive green-time selection
-- Queue/wait indicators
-- Random Forest prediction form using the supplied 14-feature model
-- Automatic ambulance and fire-truck detection using YOLO-World
-- Direction-aware automatic emergency priority
-- Optional manual reset/test control
-- Live dashboard refresh
-- CSV traffic-history logging
+- Browser-camera support for local and HTTPS cloud deployments
+- YOLO-based detection of cars, motorcycles, buses, trucks, and pedestrians
+- YOLO-World detection for ambulance and fire-truck priority
+- Consecutive-frame confirmation and direction-aware emergency handling
+- Four-direction traffic estimation (North, South, East, West)
+- Traffic-density classification and adaptive green-time selection
+- Vehicle tracking and approximate speed estimation
+- Queue and waiting indicators
+- Random Forest prediction using the included 14-feature model
+- Live dashboard updates and traffic-history CSV logging
+- Manual emergency test/reset controls
 - Mobile-friendly dashboard
 
-## Cloud camera architecture
+## How the System Works
 
-The cloud version uses the **user's browser camera**, not `cv2.VideoCapture(0)` on the server:
+For cloud deployment, the browser captures the camera frame and sends it to Flask for processing.
 
 ```text
 Browser Camera
-    -> /api/frame
-    -> Flask
-    -> OpenCV
-    -> YOLO
-    -> Adaptive Controller
-    -> JSON + annotated image
-    -> Browser Dashboard
+    -> Flask Frame API
+    -> OpenCV and YOLO Vehicle Detection
+    -> Traffic Density and Direction Estimation
+    -> Adaptive Signal Controller
+    -> Dashboard State and Annotated Frame
 ```
 
-The `/video_feed` endpoint is retained for local-server webcam use. For cloud deployment, use **Start Camera** on the dashboard.
+The emergency path uses YOLO-World with the labels **ambulance** and **fire truck**. Consecutive detections are checked before emergency priority is activated, helping reduce one-frame false detections. Emergency priority is limited to ambulances and fire trucks; ordinary trucks and police vehicles are not assigned this priority.
 
-Most browsers allow `getUserMedia()` on **HTTPS** sites or `localhost`. A plain HTTP public URL may block camera access.
+The Random Forest prediction form is a separate model demonstration. Live signal timing is handled by the adaptive controller rather than being presented as a Random Forest prediction.
 
-## Running locally
-
-### Windows
+## Run Locally on Windows
 
 ```powershell
 python -m venv venv
@@ -49,74 +43,39 @@ python -m pip install -r requirements.txt
 python run.py
 ```
 
-Open `http://127.0.0.1:5000`.
+Open `http://127.0.0.1:5000` in your browser.
 
-## Cloud / Gunicorn
+## Cloud Deployment
 
-Use one worker because the live traffic state, YOLO tracker and adaptive controller are held in process memory:
+The included `Procfile` uses Gunicorn with one worker because the live traffic state, tracker, and controller are stored in process memory.
 
 ```bash
 gunicorn --workers 1 --threads 4 --timeout 120 run:app
 ```
 
-The included `Procfile` uses this command.
+For cloud camera access, deploy over HTTPS and select **Start Camera** on the dashboard. Public HTTP sites may not be allowed to access the browser camera.
 
-## API endpoints
+## API Endpoints
 
-- `/` — dashboard
-- `/api/frame` — browser camera frame processing
-- `/api/state` — current traffic/signal state
-- `/api/health` — server/model health
-- `/api/history` — recent traffic history
-- `/api/control` — manual emergency reset/test control
-- `/api/camera/reset` — reset live metrics after camera stop
-- `/video_feed` — local server webcam stream
-- `/predict` — manual Random Forest prediction
+| Endpoint | Purpose |
+|---|---|
+| `/` | Main dashboard |
+| `/api/frame` | Process a browser-camera frame |
+| `/api/state` | Read current traffic and signal state |
+| `/api/health` | Check server/model health |
+| `/api/history` | Read recent traffic history |
+| `/api/control` | Manual emergency test/reset control |
+| `/api/camera/reset` | Reset live metrics after camera stop |
+| `/video_feed` | Local server webcam stream |
+| `/predict` | Random Forest prediction form |
 
-## Accuracy notes
+## Model and Evaluation Notes
 
-The bundled `yolo11n.pt` is a general YOLO/COCO model for ordinary traffic detection. It does **not** provide reliable ambulance or fire-engine classes, so ordinary trucks are never treated as emergency vehicles.
+The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation helps stabilize emergency decisions, but it does not guarantee perfect classification.
 
-The live emergency detector uses YOLO-World with an emergency-only vocabulary for **ambulance** and **fire truck**. Detection requires consecutive confirmation before automatic emergency priority is activated. For a production-grade system, replace the zero-shot model with a custom-trained emergency-vehicle detector and validate it extensively before deployment.
+Vehicle speed is an estimate and depends on camera placement and calibration; it is not intended for enforcement. This project is an academic prototype and should be tested with representative day/night footage and fail-safe controls before any real-world signal deployment.
 
-Camera speed is approximate unless the camera is calibrated and should not be used for enforcement.
+## References
 
-The Random Forest prediction is kept separate from the real-time adaptive controller so the project does not falsely claim that the Random Forest controls every live frame.
-
-
-## Automatic emergency vehicle detection
-
-The live camera now runs a second YOLO-World detector configured with the custom vocabulary:
-
-- **ambulance**
-- **fire truck**
-
-YOLO-World supports custom text classes with `set_classes()`, so the application can detect these categories without requiring a bundled custom-trained checkpoint. [Ultralytics YOLO-World documentation](https://docs.ultralytics.com/models/yolo-world)
-
-Detection flow:
-
-```text
-Browser Camera
-    -> Traffic YOLO
-    -> Emergency YOLO-World
-    -> Ambulance / Fire Truck
-    -> 2 consecutive confirmations
-    -> Direction from vehicle position
-    -> Automatic Emergency Priority
-    -> Selected Direction GREEN
-    -> Dashboard Alert
-```
-
-The emergency model is loaded lazily on the first camera frame, so normal application startup does not wait for the additional model download.
-
-Environment variables:
-
-```text
-EMERGENCY_MODEL_PATH=yolov8s-worldv2.pt
-EMERGENCY_CONF=0.38
-EMERGENCY_CONSECUTIVE=2
-```
-
-For a higher-accuracy production system, replace the zero-shot YOLO-World model with a custom-trained ambulance/fire-truck detector and set `EMERGENCY_MODEL_PATH` to that `.pt` file. Ultralytics recommends custom labeled data and validation when adapting detection to a specific deployment scenario. [Ultralytics custom detection training guide](https://docs.ultralytics.com/tasks/detect)
-
-**Important:** This is an academic prototype. Emergency detection should not be used as the sole basis for real-world traffic-signal or safety decisions without extensive validation, camera calibration, and fail-safe controls.
+- [Ultralytics YOLO-World documentation](https://docs.ultralytics.com/models/yolo-world)
+- [Ultralytics object-detection training guide](https://docs.ultralytics.com/tasks/detect)
