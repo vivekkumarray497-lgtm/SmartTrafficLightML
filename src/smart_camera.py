@@ -90,7 +90,6 @@ while True:
 
             else:
 
-                # Person, animals etc. are ignored
                 continue
 
             cv2.rectangle(

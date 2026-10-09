@@ -32,7 +32,6 @@ while True:
         print("Camera frame could not be read.")
         break
 
-    # YOLO tracking
     results = model.track(
         frame,
         persist=True,
@@ -62,7 +61,6 @@ while True:
                 if confidence < 0.25:
                     continue
 
-                # Tracking ID
                 if box.id is not None:
                     track_id = int(box.id[0])
                 else:
@@ -75,7 +73,6 @@ while True:
 
                 vehicle_name = None
 
-                # COCO classes
                 if class_id == 2:
 
                     vehicle_name = "Car"
@@ -97,10 +94,8 @@ while True:
                     trucks += 1
 
                 else:
-                    # Person and other objects ignored
                     continue
 
-                # Bounding box
                 cv2.rectangle(
                     frame,
                     (x1, y1),
@@ -109,7 +104,6 @@ while True:
                     2
                 )
 
-                # Label with unique tracking ID
                 label = (
                     f"{vehicle_name} "
                     f"ID:{track_id} "
@@ -126,7 +120,6 @@ while True:
                     2
                 )
 
-    # Traffic density
     density_data = calculate_traffic_density(
         cars,
         motorcycles,
@@ -137,7 +130,6 @@ while True:
     total_vehicles = density_data["total_vehicles"]
     density = density_data["density"]
 
-    # Signal decision
     signal_data = get_signal_message(
         total_vehicles,
         False
@@ -146,7 +138,6 @@ while True:
     signal = signal_data["signal"]
     green_time = signal_data["green_time"]
 
-    # Header
     cv2.putText(
         frame,
         "SMART TRAFFIC VEHICLE TRACKER",
@@ -157,7 +148,6 @@ while True:
         2
     )
 
-    # Vehicle counts
     cv2.putText(
         frame,
         f"Cars: {cars}",

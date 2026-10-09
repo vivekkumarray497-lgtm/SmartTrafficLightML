@@ -46,12 +46,6 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
-                # IMPORTANT: this model is used only for emergency detection.
-                # Do not put bus/truck/car/van in the same vocabulary. A
-                # zero-shot model otherwise has to choose between ordinary and
-                # emergency labels and can turn an ambulance into "bus".
-                # Ordinary traffic classification is already handled by the
-                # main YOLO detector in VisionEngine.
                 self.model.set_classes([
                     "ambulance",
                     "emergency ambulance",
@@ -134,12 +128,9 @@ class EmergencyDetector:
             traffic_boxes = traffic_boxes or []
             candidates = []
 
-            # Full-frame inference.
             result = self._predict(frame)
             results_to_parse = [(result, 0, 0)]
 
-            # Also inspect each vehicle crop. This helps when the ambulance is
-            # small in a wide traffic-camera frame.
             for item in traffic_boxes:
                 x1, y1, x2, y2 = item["box"]
                 pad_x = max(8, int((x2 - x1) * 0.15))
@@ -171,10 +162,6 @@ class EmergencyDetector:
                     box_xyxy = [x1 + ox, y1 + oy, x2 + ox, y2 + oy]
                     parsed.append((label, confidence, box_xyxy))
 
-                # Only emergency labels are present in the emergency model's
-                # vocabulary, so there is no "bus" label for it to prefer.
-                # The main YOLO detector may still call the same object a bus;
-                # that normal label must NOT cancel an emergency candidate.
                 for label, confidence, candidate_box in parsed:
                     if label not in self.EMERGENCY_LABELS:
                         continue

@@ -22,10 +22,6 @@ class VisionEngine:
         return "South" if dy > 0 else "North"
 
     def process(self, frame):
-        # Keep a completely clean copy for emergency detection. The traffic
-        # detector below draws boxes/text on "frame"; feeding that annotated
-        # image to YOLO-World can change its visual evidence and cause an
-        # ambulance to be missed or confused with another vehicle.
         emergency_input = frame.copy()
 
         h, w = frame.shape[:2]

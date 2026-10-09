@@ -12,7 +12,6 @@ class CameraSource:
 
     def open(self):
 
-        # For local video files
         if isinstance(self.source, str):
 
             if (
@@ -117,7 +116,6 @@ def main():
 
     manager = MultiCameraManager()
 
-    # Test with your webcam
     manager.add_camera(
         "north",
         0,
