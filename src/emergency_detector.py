@@ -7,10 +7,9 @@ class EmergencyDetector:
     """
     Emergency vehicle detector using YOLO-World.
 
-    The detector compares emergency prompts against common road-vehicle
-    prompts (bus/truck/car/van) and confirms the same emergency type and
-    direction across multiple frames. Only ambulance and fire truck can
-    trigger emergency priority.
+    Emergency prompts are evaluated alongside ordinary vehicle prompts so
+    buses, vans, cars, and trucks have non-emergency alternatives. Only
+    ambulance and fire-truck labels can trigger priority.
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
@@ -46,8 +45,9 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
-                # YOLO-World is open-vocabulary; include common visual names
-                # because emergency vehicles are often labeled as vans/trucks.
+                # Include non-emergency alternatives as contrast classes.
+                # Without these, an ordinary van/bus/truck may be forced into
+                # one of the emergency prompts by the open-vocabulary model.
                 self.model.set_classes([
                     "ambulance",
                     "emergency ambulance",
@@ -60,6 +60,12 @@ class EmergencyDetector:
                     "firefighting truck",
                     "fire department engine",
                     "fire rescue truck",
+                    "ordinary passenger car",
+                    "police car",
+                    "city bus",
+                    "delivery van",
+                    "cargo truck",
+                    "semi truck",
                 ])
                 self.available = True
             except Exception as exc:
@@ -138,6 +144,7 @@ class EmergencyDetector:
             candidates = []
 
             result = self._predict(frame)
+            self.error = ""
             results_to_parse = [(result, 0, 0)]
             full_frame_has_emergency = False
             if result.boxes is not None:
@@ -245,6 +252,13 @@ class EmergencyDetector:
             }
 
         except Exception as exc:
+            # Keep a successfully loaded model available after a transient
+            # bad frame/inference error; the next frame should be retried.
             self.error = str(exc)[:220]
-            self.available = False
+            self.available = self.model is not None
+            self._streak = 0
+            self._misses = 0
+            self._last_type = ""
+            self._last_direction = ""
+            self._last_confidence = 0.0
             return self._empty()
