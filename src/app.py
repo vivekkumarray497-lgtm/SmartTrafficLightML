@@ -395,6 +395,7 @@ def api_frame():
         state["image"] = "data:image/jpeg;base64," + encoded
         return jsonify(state)
     except Exception as exc:
+        app.logger.exception("Browser frame processing failed")
         return jsonify({"error": f"Frame processing failed: {str(exc)[:180]}"}), 500
 
 
