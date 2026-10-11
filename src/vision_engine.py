@@ -34,10 +34,21 @@ class VisionEngine:
         traffic_boxes = []
         normal_annotations = []
 
-        result = self.model.track(
-            frame, persist=True, conf=0.30, iou=0.45,
-            verbose=False, classes=[0, 2, 3, 5, 7]
-        )[0]
+        try:
+            result = self.model.track(
+                frame, persist=True, conf=0.30, iou=0.45,
+                verbose=False, classes=[0, 2, 3, 5, 7]
+            )[0]
+        except Exception as exc:
+            # Tracking may fail in a fresh/cloud runtime when the optional
+            # LAP assignment dependency is missing. Keep frame-level AI
+            # detection alive by falling back to prediction without tracking.
+            if "lap" not in str(exc).lower():
+                raise
+            result = self.model.predict(
+                frame, conf=0.30, iou=0.45,
+                verbose=False, classes=[0, 2, 3, 5, 7]
+            )[0]
 
         boxes = result.boxes
         if boxes is not None:
