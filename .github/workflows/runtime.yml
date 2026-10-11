@@ -38,6 +38,7 @@ jobs:
           from PIL import Image
 
           import app
+          from unittest.mock import patch
 
           client = app.app.test_client()
 
@@ -87,6 +88,37 @@ jobs:
 
           app.vision.process = original_process
 
+          # Regression checks for emergency label normalization.
+          assert app.EmergencyDetector._label("firefighting truck") == "fire truck"
+          assert app.EmergencyDetector._label("fire engine") == "fire truck"
+          assert app.EmergencyDetector._label("ambulance van") == "ambulance"
+          assert app.EmergencyDetector._label("police car") not in app.EmergencyDetector.EMERGENCY_LABELS
+
+          # Verify normal direction changes include a yellow clearance phase.
+          app.control_mode = "Auto"
+          app.current_direction = "North"
+          app.signal_phase = "Green"
+          app.pending_direction = None
+          app.signal_started_at = 1000.0
+          app.phase_started_at = 1000.0
+          app.signal_duration = 15
+          phase_metrics = {
+              "cars": 5, "bikes": 0, "buses": 0, "trucks": 0,
+              "total_vehicles": 5, "pedestrians": 0, "avg_speed": 10.0,
+              "density": "LOW", "queue_length": 2, "avg_waiting_time": 28.0,
+              "directions": {"North": 0, "South": 0, "East": 5, "West": 0},
+              "emergency": False, "emergency_type": "",
+              "emergency_direction": "", "emergency_confidence": 0.0,
+          }
+          with patch("app.time.time", return_value=1016.0):
+              app.update_state(phase_metrics)
+          assert app.traffic_data["signal"] == "Yellow", app.traffic_data
+          with patch("app.time.time", return_value=1020.0):
+              app.update_state(phase_metrics)
+          assert app.traffic_data["signal"] == "Green", app.traffic_data
+          assert app.traffic_data["active_direction"] == "East", app.traffic_data
+
+          print("Emergency label and yellow-clearance regression checks: PASS")
           print("Runtime smoke test: PASS")
           print("Health:", health_data)
           print("State/API/frame/control checks: PASS")
