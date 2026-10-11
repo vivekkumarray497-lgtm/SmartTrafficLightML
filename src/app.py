@@ -141,7 +141,8 @@ def update_state(metrics):
             "signal_message": (
                 f"EMERGENCY PRIORITY - {metrics.get('emergency_type', 'Emergency').upper()} | {active} GREEN"
                 if metrics["emergency"]
-                else f"{active} direction selected by adaptive traffic priority"
+                else (f"MANUAL DEMO MODE - {active} GREEN" if control_mode == "Manual"
+                      else f"{active} direction selected by adaptive traffic priority")
             ),
             "emergency_type": metrics.get("emergency_type", ""),
             "emergency_direction": metrics.get("emergency_direction", ""),
@@ -275,6 +276,12 @@ def api_mode():
     last_signal_key = None
     with state_lock:
         traffic_data["mode"] = control_mode
+        if control_mode == "Manual":
+            traffic_data["active_direction"] = manual_direction
+            traffic_data["signal"] = "Green"
+            traffic_data["signal_message"] = f"MANUAL DEMO MODE - {manual_direction} GREEN"
+            traffic_data["green_time"] = 0
+            traffic_data["countdown"] = 0
     return jsonify({"mode": control_mode, "message": f"{control_mode} mode enabled."})
 
 
