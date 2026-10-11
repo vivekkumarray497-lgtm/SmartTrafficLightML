@@ -131,9 +131,16 @@ def update_state(metrics):
     analytics.append(metrics, active, signal)
 
 
-def detect_frame(frame):
+def detect_frame(frame, camera_direction=None):
     with frame_lock:
         metrics, annotated = vision.process(frame)
+        if camera_direction in DIRECTIONS:
+            metrics["directions"] = {
+                direction: metrics["total_vehicles"] if direction == camera_direction else 0
+                for direction in DIRECTIONS
+            }
+            if metrics.get("emergency"):
+                metrics["emergency_direction"] = camera_direction
         update_state(metrics)
         return annotated
 
@@ -167,7 +174,9 @@ def generate_frames():
             time.sleep(0.05)
             continue
         try:
-            frame = detect_frame(frame)
+            entry = _camera_entry()
+            camera_direction = entry.get("direction", "North") if entry else None
+            frame = detect_frame(frame, camera_direction=camera_direction)
         except Exception as exc:
             cv2.putText(
                 frame, f"Detection error: {str(exc)[:60]}", (15, 35),
