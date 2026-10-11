@@ -125,8 +125,11 @@ class VisionEngine:
                     ix2, iy2 = min(x2, ex2), min(y2, ey2)
                     intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
                     area_b = max(0, ex2 - ex1) * max(0, ey2 - ey1)
-                    union = area_a + area_b - intersection
-                    if union > 0 and intersection / union >= 0.25:
+                    smaller_area = min(area_a, area_b)
+                    # Emergency crop boxes can be tighter than YOLO vehicle
+                    # boxes, so IoU alone may fail even when they are the same
+                    # vehicle. Use overlap relative to the smaller box.
+                    if smaller_area > 0 and intersection / smaller_area >= 0.50:
                         overlaps_emergency = True
                         break
             if overlaps_emergency:
