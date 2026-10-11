@@ -19,6 +19,7 @@ HISTORY_PATH = os.path.join(BASE_DIR, "data", "traffic_history.csv")
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)
 
 from signal_controller import get_signal_message
 from vision_engine import VisionEngine
