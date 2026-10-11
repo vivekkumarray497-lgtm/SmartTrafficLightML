@@ -306,7 +306,7 @@ def api_health():
         server_camera = camera is not None and camera.isOpened()
     base_models_ready = model is not None and yolo_model is not None
     return jsonify({
-        "status": "ok" if base_models_ready else "degraded",
+        "status": "ok" if base_models_ready and not emergency_detector.error else "degraded",
         "server_camera": server_camera,
         "browser_camera": True,
         "model": model is not None,
