@@ -267,6 +267,45 @@ def api_camera_reset():
     reset_state()
     return jsonify(current_state())
 
+@app.route("/api/cameras", methods=["GET"])
+def api_cameras():
+    configured = []
+    for entry in CAMERAS:
+        source = entry.get("source", 0)
+        if isinstance(source, int) or (isinstance(source, str) and source.isdigit()):
+            source_type = "Webcam device"
+        elif str(source).lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+            source_type = "Network stream"
+        else:
+            source_type = "Video file / stream"
+        configured.append({
+            "id": str(entry.get("id", "")),
+            "name": str(entry.get("name", entry.get("id", "Camera"))),
+            "direction": entry.get("direction", "North"),
+            "source_type": source_type,
+            "active": str(entry.get("id")) == str(active_camera_id)
+        })
+    return jsonify({"cameras": configured, "active_camera_id": active_camera_id})
+
+
+@app.route("/api/cameras/select", methods=["POST"])
+def api_camera_select():
+    global active_camera_id, camera, camera_source_id
+    payload = request.get_json(silent=True) or {}
+    requested_id = str(payload.get("camera_id", "")).strip()
+    if not any(str(entry.get("id")) == requested_id for entry in CAMERAS):
+        return jsonify({"error": "Camera ID is not defined in camera_config.py."}), 400
+    with camera_lock:
+        active_camera_id = requested_id
+        if camera is not None:
+            camera.release()
+            camera = None
+        camera_source_id = None
+    return jsonify({
+        "active_camera_id": active_camera_id,
+        "message": "Camera source selected. Open the server camera feed to connect."
+    })
+
 
 @app.route("/api/control", methods=["POST"])
 def api_control():
