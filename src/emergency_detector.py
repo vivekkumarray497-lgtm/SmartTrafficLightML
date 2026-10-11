@@ -53,33 +53,17 @@ class EmergencyDetector:
                 # Include non-emergency alternatives as contrast classes.
                 # Without these, an ordinary van/bus/truck may be forced into
                 # one of the emergency prompts by the open-vocabulary model.
+                # Keep this model focused on the two priority classes. The
+                # normal YOLO model already detects cars, buses and trucks;
+                # putting 16+ overlapping generic/synonym prompts in the same
+                # YOLO-World class list diluted ambulance scores and encouraged
+                # ambulance -> bus/truck confusion.
                 self.model.set_classes([
-                    # Keep emergency prompts explicit and varied. YOLO-World
-                    # is open-vocabulary and otherwise often maps an ambulance
-                    # to its closest generic vehicle class.
                     "ambulance",
-                    "emergency medical ambulance",
-                    "ambulance with a red cross medical symbol",
-                    "white ambulance with red emergency markings",
-                    "ambulance with flashing emergency lights",
-                    "medical emergency response vehicle",
-                    "ambulance van",
-                    "ambulance car",
+                    "ambulance with red cross markings",
+                    "ambulance with emergency lights",
                     "fire truck",
                     "fire engine",
-                    "firefighting vehicle",
-                    "fire rescue truck",
-                    "fire department engine",
-                    # Contrast classes prevent ordinary traffic from being
-                    # forced into an emergency class.
-                    "ordinary passenger car",
-                    "police car",
-                    "city bus",
-                    "public transit bus",
-                    "delivery van",
-                    "cargo truck",
-                    "semi truck",
-                    "ordinary box truck",
                 ])
                 self.available = True
             except Exception as exc:
@@ -133,6 +117,31 @@ class EmergencyDetector:
             return "car"
         return ""
 
+    @classmethod
+    def _matches_vehicle_box(cls, candidate_box, traffic_boxes, threshold=0.15):
+        """Require an emergency box to overlap a vehicle found by the base detector."""
+        if not traffic_boxes:
+            return True
+        for vehicle in traffic_boxes:
+            vehicle_box = vehicle.get("box")
+            if not vehicle_box or len(vehicle_box) != 4:
+                continue
+            if cls._iou(candidate_box, vehicle_box) >= threshold:
+                return True
+            # Emergency boxes from crop inference may be tighter than the base
+            # vehicle box, so also compare overlap against the smaller box area.
+            x1, y1, x2, y2 = candidate_box
+            vx1, vy1, vx2, vy2 = vehicle_box
+            intersection = max(0, min(x2, vx2) - max(x1, vx1)) * max(
+                0, min(y2, vy2) - max(y1, vy1)
+            )
+            area_a = max(0, x2 - x1) * max(0, y2 - y1)
+            area_b = max(0, vx2 - vx1) * max(0, vy2 - vy1)
+            smaller = min(area_a, area_b)
+            if smaller > 0 and intersection / smaller >= threshold:
+                return True
+        return False
+
     @staticmethod
     def _deduplicate(candidates, overlap_threshold=0.55):
         """Keep the strongest emergency candidate when full-frame/crop boxes overlap."""
@@ -169,9 +178,9 @@ class EmergencyDetector:
             image,
             conf=self.confidence,
             iou=0.45,
-            # Higher resolution helps with distant ambulances and small
-            # emergency markings in browser-camera frames.
-            imgsz=1024,
+            # Keep enough detail for vehicle recognition without the
+            # substantial latency of 1024px inference on Colab CPU.
+            imgsz=800,
             verbose=False,
         )[0]
 
@@ -198,7 +207,7 @@ class EmergencyDetector:
                 key=lambda item: max(0, item["box"][2] - item["box"][0]) *
                                  max(0, item["box"][3] - item["box"][1]),
                 reverse=True,
-            )[:5]
+            )[:3]
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
                 # Give the classifier more context (lights, markings and body
@@ -240,6 +249,16 @@ class EmergencyDetector:
                     cx = (bx1 + bx2) / 2
                     cy = (by1 + by2) / 2
                     direction = self._direction(cx, cy, width, height)
+
+                    if not self._matches_vehicle_box(candidate_box, traffic_boxes):
+                        continue
+
+                    if os.environ.get("EMERGENCY_DEBUG", "").strip().lower() in {"1", "true", "yes"}:
+                        print(
+                            f"[emergency-ai] class={label} confidence={confidence:.3f} "
+                            f"box={candidate_box}",
+                            flush=True,
+                        )
 
                     candidates.append({
                         "label": label,
