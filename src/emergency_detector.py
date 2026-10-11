@@ -130,19 +130,35 @@ class EmergencyDetector:
 
             result = self._predict(frame)
             results_to_parse = [(result, 0, 0)]
+            full_frame_has_emergency = False
+            if result.boxes is not None:
+                for box in result.boxes:
+                    class_id = int(box.cls[0])
+                    if self._label(result.names[class_id]) in self.EMERGENCY_LABELS:
+                        full_frame_has_emergency = True
+                        break
 
-            for item in traffic_boxes:
-                x1, y1, x2, y2 = item["box"]
-                pad_x = max(8, int((x2 - x1) * 0.15))
-                pad_y = max(8, int((y2 - y1) * 0.15))
-                cx1 = max(0, x1 - pad_x)
-                cy1 = max(0, y1 - pad_y)
-                cx2 = min(width, x2 + pad_x)
-                cy2 = min(height, y2 + pad_y)
-                if cx2 - cx1 >= 40 and cy2 - cy1 >= 40:
-                    crop = frame[cy1:cy2, cx1:cx2]
-                    crop_result = self._predict(crop)
-                    results_to_parse.append((crop_result, cx1, cy1))
+            # Run crop inference only as a fallback, and cap it to the two
+            # largest detected vehicles to avoid one model call per vehicle.
+            if not full_frame_has_emergency:
+                largest_boxes = sorted(
+                    traffic_boxes,
+                    key=lambda item: max(0, item["box"][2] - item["box"][0]) *
+                                     max(0, item["box"][3] - item["box"][1]),
+                    reverse=True,
+                )[:2]
+                for item in largest_boxes:
+                    x1, y1, x2, y2 = item["box"]
+                    pad_x = max(8, int((x2 - x1) * 0.15))
+                    pad_y = max(8, int((y2 - y1) * 0.15))
+                    cx1 = max(0, x1 - pad_x)
+                    cy1 = max(0, y1 - pad_y)
+                    cx2 = min(width, x2 + pad_x)
+                    cy2 = min(height, y2 + pad_y)
+                    if cx2 - cx1 >= 40 and cy2 - cy1 >= 40:
+                        crop = frame[cy1:cy2, cx1:cx2]
+                        crop_result = self._predict(crop)
+                        results_to_parse.append((crop_result, cx1, cy1))
 
             for result, ox, oy in results_to_parse:
                 if result.boxes is None:
