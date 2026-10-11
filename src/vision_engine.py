@@ -75,7 +75,8 @@ class VisionEngine:
                     if dt > 0.01:
                         pixel_speed = dist / dt
                         # This is a relative image-motion estimate, not calibrated km/h.
-                        speeds.append(min(pixel_speed * 0.08, 120))
+                        if cid in self.VEHICLES:
+                            speeds.append(min(pixel_speed * 0.08, 120))
                         if cid in self.VEHICLES and pixel_speed < 5.0:
                             self.stationary_since.setdefault(tid, now)
                             stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
