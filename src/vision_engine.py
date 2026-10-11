@@ -13,6 +13,7 @@ class VisionEngine:
         self.emergency_detector = emergency_detector
         self.history = defaultdict(lambda: deque(maxlen=20))
         self.first_seen = {}
+        self.stationary_since = {}
 
     def _direction(self, x, y, w, h):
         dx = x - w / 2
@@ -29,6 +30,7 @@ class VisionEngine:
         directions = {d: 0 for d in ["North", "South", "East", "West"]}
         pedestrians = 0
         speeds = []
+        stopped_waits = []
         traffic_boxes = []
 
         result = self.model.track(
@@ -71,7 +73,14 @@ class VisionEngine:
                     dt = now - previous[0]
                     dist = math.hypot(cx - previous[1], cy - previous[2])
                     if dt > 0.01:
-                        speeds.append(min(dist / dt * 0.08, 120))
+                        pixel_speed = dist / dt
+                        # This is a relative image-motion estimate, not calibrated km/h.
+                        speeds.append(min(pixel_speed * 0.08, 120))
+                        if cid in self.VEHICLES and pixel_speed < 5.0:
+                            self.stationary_since.setdefault(tid, now)
+                            stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
+                        else:
+                            self.stationary_since.pop(tid, None)
 
                 if tid not in self.first_seen:
                     self.first_seen[tid] = now
@@ -120,6 +129,13 @@ class VisionEngine:
 
         total = sum(counts.values())
         avg_speed = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
+        # Approximate queue proxy: vehicles in the lower 40% of the frame.
+        # Accurate queue lengths require a calibrated stop-line/ROI per camera.
+        queue_length = sum(
+            1 for item in traffic_boxes
+            if (item["box"][1] + item["box"][3]) / 2 >= h * 0.60
+        )
+        avg_waiting_time = round(sum(stopped_waits) / len(stopped_waits), 1) if stopped_waits else 0.0
         density = (
             "LOW" if total < 6 else
             "MEDIUM" if total < 15 else
@@ -134,8 +150,8 @@ class VisionEngine:
             "pedestrians": pedestrians,
             "avg_speed": avg_speed,
             "density": density,
-            "queue_length": total,
-            "avg_waiting_time": round(max(0, (30 - avg_speed) * 1.4), 1),
+            "queue_length": queue_length,
+            "avg_waiting_time": avg_waiting_time,
             "emergency": emergency,
             "emergency_type": emergency_type,
             "emergency_direction": emergency_direction,
