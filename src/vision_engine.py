@@ -120,6 +120,10 @@ class VisionEngine:
             if annotation["is_vehicle"]:
                 area_a = max(0, x2 - x1) * max(0, y2 - y1)
                 for item in emergency_detections:
+                    # Only a confirmed candidate should hide the ordinary label.
+                    # Keep normal vehicle labels visible while emergency status is tentative.
+                    if not item.get("confirmed", False):
+                        continue
                     ex1, ey1, ex2, ey2 = item["box"]
                     ix1, iy1 = max(x1, ex1), max(y1, ey1)
                     ix2, iy2 = min(x2, ex2), min(y2, ey2)
@@ -143,11 +147,13 @@ class VisionEngine:
 
         for item in emergency_detections:
             x1, y1, x2, y2 = item["box"]
-            color = (0, 0, 255)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
+            confirmed_candidate = bool(item.get("confirmed", False))
+            color = (0, 0, 255) if confirmed_candidate else (0, 165, 255)
+            label_prefix = "CONFIRMED" if confirmed_candidate else "POSSIBLE"
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3 if confirmed_candidate else 2)
             cv2.putText(
                 frame,
-                f"EMERGENCY: {item['label']} {item['confidence']:.0%}",
+                f"{label_prefix}: {item['label']} {item['confidence']:.0%}",
                 (x1, max(y1 - 10, 25)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2
             )
