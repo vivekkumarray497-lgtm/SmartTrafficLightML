@@ -19,6 +19,14 @@
 <img id="annotated" class="camera" alt="AI processed traffic" style="margin-top:10px">
 <div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="startCamera()">Start Camera</button><button onclick="stopCamera()">Stop Camera</button></div>
 <p id="cameraStatus" class="muted">Browser camera mode works on cloud deployment and local Windows. HTTPS or localhost is required by most browsers.</p>
+<hr style="border:0;border-top:1px solid #e2e8f0;margin:18px 0">
+<h3>Configured Server Cameras</h3>
+<p class="muted">Choose a source registered in <code>camera_config.py</code> (USB camera, reachable IP/RTSP stream, or test video).</p>
+<div class="row"><div><label for="serverCameraSelect">Camera source</label><select id="serverCameraSelect"></select></div><div><label for="serverCameraDirection">Direction</label><input id="serverCameraDirection" value="North" readonly></div></div>
+<div id="serverCameraInfo" class="muted">Loading configured cameras...</div>
+<div class="toolbar"><button type="button" onclick="selectServerCamera()">Use Selected Source</button><button type="button" class="secondary" onclick="refreshServerCameras()">Refresh List</button></div>
+<img id="serverCameraFeed" class="camera" alt="Configured server camera feed" style="margin-top:10px" src="/video_feed">
+<p class="muted">Only one server-side source is active at a time. For multiple simultaneous browser cameras, each camera needs its own stream/session and independent tracking state.</p>
 </div>
 <div class="card"><h2>📊 Live Traffic Metrics</h2><div class="stats">
 <div class="stat">Cars<strong id="cars">{{state.cars}}</strong></div><div class="stat">Bikes<strong id="bikes">{{state.bikes}}</strong></div><div class="stat">Buses<strong id="buses">{{state.buses}}</strong></div><div class="stat">Trucks<strong id="trucks">{{state.trucks}}</strong></div>
@@ -83,6 +91,64 @@ async function refresh() {
 }
 setInterval(refresh, 1500);
 refresh();
+
+async function refreshServerCameras() {
+  const select = document.getElementById('serverCameraSelect');
+  const info = document.getElementById('serverCameraInfo');
+  try {
+    const response = await fetch('/api/cameras', {cache:'no-store'});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not load camera list');
+    const previous = select.value;
+    select.innerHTML = '';
+    (data.cameras || []).forEach(camera => {
+      const option = document.createElement('option');
+      option.value = camera.id;
+      option.textContent = camera.name + ' (' + camera.source_type + ')';
+      option.dataset.direction = camera.direction || 'North';
+      select.appendChild(option);
+    });
+    if (data.active_camera_id) select.value = data.active_camera_id;
+    else if (previous) select.value = previous;
+    updateServerCameraDirection();
+    info.textContent = (data.cameras || []).length + ' configured source(s). Edit camera_config.py to add more.';
+  } catch (error) {
+    info.textContent = 'Camera list error: ' + error.message;
+  }
+}
+
+function updateServerCameraDirection() {
+  const select = document.getElementById('serverCameraSelect');
+  const option = select.options[select.selectedIndex];
+  document.getElementById('serverCameraDirection').value = option ? (option.dataset.direction || 'North') : '';
+}
+document.getElementById('serverCameraSelect').addEventListener('change', updateServerCameraDirection);
+
+async function selectServerCamera() {
+  const select = document.getElementById('serverCameraSelect');
+  const info = document.getElementById('serverCameraInfo');
+  if (!select.value) {
+    info.textContent = 'No camera sources configured. Add one in camera_config.py.';
+    return;
+  }
+  try {
+    const response = await fetch('/api/cameras/select', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({camera_id:select.value})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not select camera');
+    info.textContent = data.message;
+    const feed = document.getElementById('serverCameraFeed');
+    feed.src = '';
+    setTimeout(() => { feed.src = '/video_feed?refresh=' + Date.now(); }, 150);
+    await refreshServerCameras();
+  } catch (error) {
+    info.textContent = 'Camera selection error: ' + error.message;
+  }
+}
+refreshServerCameras();
 
 async function startCamera() {
   try {
