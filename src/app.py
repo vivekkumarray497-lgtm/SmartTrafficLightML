@@ -299,7 +299,7 @@ def api_cameras():
             "source_type": source_type,
             "active": str(entry.get("id")) == str(active_camera_id)
         })
-    return jsonify({"cameras": configured, "active_camera_id": active_camera_id})
+    return jsonify({"cameras": configured, "active_camera_id": active_camera_id, "camera_direction": active_camera_direction})
 
 
 @app.route("/api/cameras/select", methods=["POST"])
