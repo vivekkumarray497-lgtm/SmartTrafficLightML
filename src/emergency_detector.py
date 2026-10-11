@@ -19,10 +19,10 @@ class EmergencyDetector:
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
-        # YOLO-World can score small emergency markings weakly in webcam frames.
-        # Keep the threshold configurable, with a slightly lower default; the
-        # consecutive-frame confirmation below reduces one-frame false alarms.
-        self.confidence = float(os.environ.get("EMERGENCY_CONF", min(confidence, 0.12)))
+        # Emergency objects can score below generic vehicle detections. Use a
+        # lower recall-oriented threshold; vehicle-box overlap plus consecutive
+        # frame confirmation guard against isolated false positives.
+        self.confidence = float(os.environ.get("EMERGENCY_CONF", min(confidence, 0.08)))
         self.consecutive_required = max(
             1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
         )
@@ -233,6 +233,11 @@ class EmergencyDetector:
                     confidence = float(box.conf[0])
                     class_id = int(box.cls[0])
                     raw_label = str(names[class_id])
+                    if os.environ.get("EMERGENCY_DEBUG", "").strip().lower() in {"1", "true", "yes"}:
+                        print(
+                            f"[emergency-ai:raw] class={raw_label} confidence={confidence:.3f}",
+                            flush=True,
+                        )
                     label = self._label(raw_label)
                     if not label:
                         continue
