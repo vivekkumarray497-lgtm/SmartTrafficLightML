@@ -93,7 +93,7 @@ function render(s) {
     div.innerHTML =
       '<b>' + d + '</b><br>' + n + ' vehicles' +
       '<div class="bar"><span style="width:' + Math.min(100, n / max * 100) + '%"></span></div>' +
-      (d === s.active_direction ? '<small>GREEN</small>' : '<small>RED</small>');
+      (d === s.active_direction ? '<small>' + (s.signal === 'Yellow' ? 'YELLOW' : 'GREEN') + '</small>' : '<small>RED</small>');
     box.appendChild(div);
   }
 }
