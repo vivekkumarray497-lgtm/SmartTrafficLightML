@@ -18,11 +18,15 @@
 <canvas id="captureCanvas" style="display:none"></canvas>
 <img id="annotated" class="camera" alt="AI processed traffic" style="margin-top:10px">
 <div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="startCamera()">Start Camera</button><button onclick="stopCamera()">Stop Camera</button></div>
-<p id="cameraStatus" class="muted">Browser camera mode works on cloud deployment and local Windows. HTTPS or localhost is required by most browsers.</p>
+<p id="cameraStatus" class="muted">Browser camera mode works on cloud deployments over HTTPS. Select the road direction this camera watches before starting.</p>
+<label for="browserCameraDirection">Direction for browser camera</label>
+<select id="browserCameraDirection">
+<option value="North">North</option><option value="South">South</option><option value="East">East</option><option value="West">West</option>
+</select>
 <hr style="border:0;border-top:1px solid #e2e8f0;margin:18px 0">
 <h3>Configured Server Cameras</h3>
 <p class="muted">Choose a source registered in <code>camera_config.py</code> (USB camera, reachable IP/RTSP stream, or test video).</p>
-<div class="row"><div><label for="serverCameraSelect">Camera source</label><select id="serverCameraSelect"></select></div><div><label for="serverCameraDirection">Direction</label><input id="serverCameraDirection" value="North" readonly></div></div>
+<div class="row"><div><label for="serverCameraSelect">Camera source</label><select id="serverCameraSelect"></select></div><div><label for="serverCameraDirection">Set road direction</label><select id="serverCameraDirection"><option value="North">North</option><option value="South">South</option><option value="East">East</option><option value="West">West</option></select></div></div>
 <div id="serverCameraInfo" class="muted">Loading configured cameras...</div>
 <div class="toolbar"><button type="button" onclick="selectServerCamera()">Use Selected Source</button><button type="button" class="secondary" onclick="refreshServerCameras()">Refresh List</button></div>
 <img id="serverCameraFeed" class="camera" alt="Configured server camera feed" style="margin-top:10px" src="/video_feed">
@@ -110,19 +114,22 @@ async function refreshServerCameras() {
     });
     if (data.active_camera_id) select.value = data.active_camera_id;
     else if (previous) select.value = previous;
-    updateServerCameraDirection();
+    updateServerCameraDirection(data.camera_direction);
     info.textContent = (data.cameras || []).length + ' configured source(s). Edit camera_config.py to add more.';
   } catch (error) {
     info.textContent = 'Camera list error: ' + error.message;
   }
 }
 
-function updateServerCameraDirection() {
+function updateServerCameraDirection(currentDirection) {
   const select = document.getElementById('serverCameraSelect');
   const option = select.options[select.selectedIndex];
-  document.getElementById('serverCameraDirection').value = option ? (option.dataset.direction || 'North') : '';
+  document.getElementById('serverCameraDirection').value = currentDirection || (option ? (option.dataset.direction || 'North') : 'North');
 }
-document.getElementById('serverCameraSelect').addEventListener('change', updateServerCameraDirection);
+document.getElementById('serverCameraSelect').addEventListener('change', () => updateServerCameraDirection());
+document.getElementById('browserCameraDirection').addEventListener('change', async () => {
+  document.getElementById('cameraStatus').textContent = 'Browser camera direction set to ' + document.getElementById('browserCameraDirection').value + '.';
+});
 
 async function selectServerCamera() {
   const select = document.getElementById('serverCameraSelect');
@@ -135,7 +142,7 @@ async function selectServerCamera() {
     const response = await fetch('/api/cameras/select', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({camera_id:select.value})
+      body:JSON.stringify({camera_id:select.value, direction:document.getElementById("serverCameraDirection").value})
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not select camera');
@@ -214,7 +221,7 @@ async function sendFrame() {
     const r = await fetch('/api/frame', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.68)})
+      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.68), direction: document.getElementById('browserCameraDirection').value})
     });
 
     const data = await r.json();
