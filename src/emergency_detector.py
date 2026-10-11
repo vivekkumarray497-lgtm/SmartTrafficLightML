@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 from ultralytics import YOLOWorld
 
 
@@ -29,6 +30,7 @@ class EmergencyDetector:
         self.available = False
         self.error = ""
         self.lock = threading.Lock()
+        self._next_load_attempt = 0.0
 
         self._streak = 0
         self._misses = 0
@@ -37,11 +39,11 @@ class EmergencyDetector:
         self._last_confidence = 0.0
 
     def _load(self):
-        if self.model is not None or self.error:
+        if self.model is not None or time.monotonic() < self._next_load_attempt:
             return
 
         with self.lock:
-            if self.model is not None or self.error:
+            if self.model is not None or time.monotonic() < self._next_load_attempt:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
@@ -71,6 +73,9 @@ class EmergencyDetector:
             except Exception as exc:
                 self.error = str(exc)[:220]
                 self.available = False
+                # Avoid retrying a failed model download on every camera frame.
+                # A cooldown still allows recovery after a transient cloud/network error.
+                self._next_load_attempt = time.monotonic() + 30.0
 
     @staticmethod
     def _direction(x, y, width, height):
@@ -114,6 +119,28 @@ class EmergencyDetector:
         if "car" in label:
             return "car"
         return ""
+
+    @staticmethod
+    def _deduplicate(candidates, overlap_threshold=0.55):
+        """Keep the strongest emergency candidate when full-frame/crop boxes overlap."""
+        kept = []
+        for candidate in sorted(candidates, key=lambda item: item["confidence"], reverse=True):
+            x1, y1, x2, y2 = candidate["box"]
+            area = max(0, x2 - x1) * max(0, y2 - y1)
+            duplicate = False
+            for existing in kept:
+                ex1, ey1, ex2, ey2 = existing["box"]
+                ix1, iy1 = max(x1, ex1), max(y1, ey1)
+                ix2, iy2 = min(x2, ex2), min(y2, ey2)
+                intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                existing_area = max(0, ex2 - ex1) * max(0, ey2 - ey1)
+                smaller_area = min(area, existing_area)
+                if smaller_area > 0 and intersection / smaller_area >= overlap_threshold:
+                    duplicate = True
+                    break
+            if not duplicate:
+                kept.append(candidate)
+        return kept
 
     def _empty(self):
         return {
@@ -204,6 +231,8 @@ class EmergencyDetector:
                         "box": candidate_box,
                     })
 
+            candidates = self._deduplicate(candidates)
+
             if not candidates:
                 self._misses += 1
                 if self._misses <= self.miss_tolerance and self._streak >= self.consecutive_required:
@@ -237,6 +266,12 @@ class EmergencyDetector:
             self._last_confidence = best["confidence"]
 
             confirmed = self._streak >= self.consecutive_required
+            for candidate in candidates:
+                candidate["confirmed"] = bool(
+                    confirmed
+                    and candidate["label"] == best["label"]
+                    and candidate["direction"] == best["direction"]
+                )
             return {
                 "detected": confirmed,
                 "type": best["label"] if confirmed else "",
