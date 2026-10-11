@@ -168,19 +168,26 @@ def detect_frame(frame, camera_direction=None):
 
 
 def reset_state():
+    global signal_started_at, signal_duration, last_signal_key
+    signal_started_at = time.time()
+    signal_duration = 15
+    last_signal_key = None
+    reset_direction = manual_direction if control_mode == "Manual" else "North"
     with state_lock:
         traffic_data.update({
             "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "traffic": 0,
             "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
             "queue_length": 0, "avg_waiting_time": 0.0,
             "directions": {d: 0 for d in DIRECTIONS},
-            "active_direction": "North", "green_time": 15,
+            "active_direction": reset_direction, "green_time": 0 if control_mode == "Manual" else 15,
             "signal": "Green",
-            "signal_message": "No traffic - GREEN LIGHT",
+            "signal_message": f"{'MANUAL DEMO MODE - ' + reset_direction + ' GREEN' if control_mode == 'Manual' else 'No traffic - GREEN LIGHT'}",
             "emergency": False,
             "emergency_type": "",
             "emergency_direction": "",
             "emergency_confidence": 0.0,
+            "mode": control_mode,
+            "countdown": 0 if control_mode == "Manual" else 15,
             "updated_at": "Camera stopped"
         })
 
