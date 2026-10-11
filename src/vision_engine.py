@@ -32,6 +32,7 @@ class VisionEngine:
         speeds = []
         stopped_waits = []
         traffic_boxes = []
+        normal_annotations = []
 
         result = self.model.track(
             frame, persist=True, conf=0.30, iou=0.45,
@@ -86,18 +87,19 @@ class VisionEngine:
                 if tid not in self.first_seen:
                     self.first_seen[tid] = now
 
-                cv2.rectangle(frame, (x1, y1), (x2, y2), label_color, 2)
-                cv2.putText(
-                    frame, f"{name} {conf:.2f} ID:{tid}",
-                    (x1, max(y1 - 8, 20)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, label_color, 2
-                )
+                normal_annotations.append({
+                    "box": [x1, y1, x2, y2],
+                    "label": f"{name} {conf:.2f} ID:{tid}",
+                    "color": label_color,
+                    "is_vehicle": cid in self.VEHICLES,
+                })
 
         emergency = False
         emergency_type = ""
         emergency_direction = ""
         emergency_confidence = 0.0
 
+        emergency_detections = []
         if self.emergency_detector is not None:
             emergency_info = self.emergency_detector.detect(
                 emergency_input,
@@ -108,16 +110,44 @@ class VisionEngine:
             emergency_direction = emergency_info["direction"]
             emergency_confidence = emergency_info["confidence"]
 
-            for item in emergency_info["detections"]:
-                x1, y1, x2, y2 = item["box"]
-                color = (0, 0, 255)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
-                cv2.putText(
-                    frame,
-                    f"EMERGENCY: {item['label']} {item['confidence']:.0%}",
-                    (x1, max(y1 - 10, 25)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2
-                )
+            emergency_detections = emergency_info["detections"]
+
+        # Draw ordinary detections after emergency classification. If both
+        # models identify the same vehicle, keep the emergency label only.
+        for annotation in normal_annotations:
+            x1, y1, x2, y2 = annotation["box"]
+            overlaps_emergency = False
+            if annotation["is_vehicle"]:
+                area_a = max(0, x2 - x1) * max(0, y2 - y1)
+                for item in emergency_detections:
+                    ex1, ey1, ex2, ey2 = item["box"]
+                    ix1, iy1 = max(x1, ex1), max(y1, ey1)
+                    ix2, iy2 = min(x2, ex2), min(y2, ey2)
+                    intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                    area_b = max(0, ex2 - ex1) * max(0, ey2 - ey1)
+                    union = area_a + area_b - intersection
+                    if union > 0 and intersection / union >= 0.25:
+                        overlaps_emergency = True
+                        break
+            if overlaps_emergency:
+                continue
+            cv2.rectangle(frame, (x1, y1), (x2, y2), annotation["color"], 2)
+            cv2.putText(
+                frame, annotation["label"],
+                (x1, max(y1 - 8, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, annotation["color"], 2
+            )
+
+        for item in emergency_detections:
+            x1, y1, x2, y2 = item["box"]
+            color = (0, 0, 255)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
+            cv2.putText(
+                frame,
+                f"EMERGENCY: {item['label']} {item['confidence']:.0%}",
+                (x1, max(y1 - 10, 25)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2
+            )
 
             if emergency:
                 cv2.rectangle(frame, (8, 8), (w - 8, 72), (0, 0, 255), -1)
