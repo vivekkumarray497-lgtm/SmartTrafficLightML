@@ -15,6 +15,12 @@ A Flask-based smart traffic management application that combines computer vision
 - Vehicle tracking and approximate speed estimation
 - Queue and waiting indicators
 - Random Forest prediction using the included 14-feature model
+- Modern dark, responsive dashboard with live vehicle statistics and density
+- Four-direction signal status, adaptive green duration, and countdown-to-re-evaluation
+- Auto/Manual demonstration mode with manual direction selection
+- Ambulance and fire-truck emergency alerts (police excluded from emergency priority)
+- Configurable browser/server cameras with editable North/South/East/West direction
+- Traffic history chart backed by recorded CSV samples
 - Live dashboard updates and traffic-history CSV logging
 - Manual emergency test/reset controls
 - Mobile-friendly dashboard
@@ -80,7 +86,9 @@ Use `0`, `1`, etc. for USB camera indices, a reachable RTSP/HTTP stream URL for 
 | `/api/frame` | Process a browser-camera frame |
 | `/api/state` | Read current traffic and signal state |
 | `/api/health` | Check server/model health |
-| `/api/history` | Read recent traffic history |
+| `/api/history` | Read recent traffic history for dashboard chart |
+| `/api/mode` | Switch between Auto and Manual demonstration modes |
+| `/api/manual-control` | Select a manual green direction while Manual mode is enabled |
 | `/api/control` | Manual emergency test/reset control |
 | `/api/camera/reset` | Reset live metrics after camera stop |
 | `/api/cameras` | List configured server camera sources without exposing stream URLs |
