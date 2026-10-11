@@ -38,7 +38,7 @@ Browser Camera
     -> Dashboard State and Annotated Frame
 ```
 
-The emergency path uses YOLO-World with the labels **ambulance** and **fire truck**. Consecutive detections are checked before emergency priority is activated, helping reduce one-frame false detections. Emergency priority is limited to ambulances and fire trucks; ordinary trucks and police vehicles are not assigned this priority.
+The emergency path uses YOLO-World to look for **ambulance** and **fire truck** candidates. Overlapping candidates from the full-frame and crop passes are deduplicated, and a candidate is marked **POSSIBLE** until the same emergency type/direction is detected across consecutive frames. Only a confirmed candidate activates emergency priority. Emergency priority is limited to ambulances and fire trucks; ordinary trucks and police vehicles are not assigned this priority. Confidence is the model's raw score, not a guarantee of real-world accuracy.
 
 The Random Forest prediction form is a separate model demonstration. Live signal timing is handled by the adaptive controller rather than being presented as a Random Forest prediction.
 
@@ -98,9 +98,20 @@ Use `0`, `1`, etc. for USB camera indices, a reachable RTSP/HTTP stream URL for 
 
 ## Model and Evaluation Notes
 
-The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection evaluates the full frame and up to three of the largest detected vehicle crops to improve recognition of small or distant emergency vehicles. A candidate label is not the same as confirmed emergency priority; priority requires consecutive-frame confirmation. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation helps stabilize emergency decisions, but it does not guarantee perfect classification.
+The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection evaluates the full frame and up to three of the largest detected vehicle crops to improve recognition of small or distant emergency vehicles. A candidate label is not the same as confirmed emergency priority; priority requires consecutive-frame confirmation. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation and overlapping-box deduplication help stabilize emergency decisions, but they do not guarantee perfect classification. If model loading fails temporarily, the detector retries after a short cooldown instead of retrying on every frame.
 
 Vehicle speed is an estimate and depends on camera placement and calibration; it is not intended for enforcement. This project is an academic prototype and should be tested with representative day/night footage and fail-safe controls before any real-world signal deployment.
+
+## Quick Regression Checks
+
+After installing the requirements, run the focused emergency-detector tests and Python syntax checks:
+
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q src run.py
+```
+
+For the final camera demo, verify the behavior with a clear ambulance clip, a fire-truck clip, an ordinary bus/truck, and a police vehicle. A candidate label alone must not trigger priority; check that the emergency banner appears only after consecutive-frame confirmation.
 
 ## References
 
