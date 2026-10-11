@@ -38,6 +38,8 @@ analytics = AnalyticsStore(HISTORY_PATH)
 camera = None
 camera_source_id = None
 active_camera_id = ACTIVE_CAMERA_ID
+_initial_camera = next((item for item in CAMERAS if str(item.get("id")) == str(ACTIVE_CAMERA_ID)), None)
+active_camera_direction = (_initial_camera or {}).get("direction", "North")
 camera_lock = threading.Lock()
 state_lock = threading.Lock()
 frame_lock = threading.Lock()
@@ -174,9 +176,7 @@ def generate_frames():
             time.sleep(0.05)
             continue
         try:
-            entry = _camera_entry()
-            camera_direction = entry.get("direction", "North") if entry else None
-            frame = detect_frame(frame, camera_direction=camera_direction)
+            frame = detect_frame(frame, camera_direction=active_camera_direction)
         except Exception as exc:
             cv2.putText(
                 frame, f"Detection error: {str(exc)[:60]}", (15, 35),
@@ -234,7 +234,8 @@ def api_health():
         "emergency_detector": emergency_detector.available,
         "emergency_detector_loaded": emergency_detector.model is not None,
         "emergency_detector_error": emergency_detector.error,
-        "active_camera_id": active_camera_id
+        "active_camera_id": active_camera_id,
+        "camera_direction": active_camera_direction
     })
 
 
@@ -259,7 +260,10 @@ def api_frame():
         if frame is None:
             raise ValueError("Invalid JPEG frame")
 
-        annotated = detect_frame(frame)
+        requested_direction = str(payload.get("direction", active_camera_direction)).title()
+        if requested_direction not in DIRECTIONS:
+            return jsonify({"error": "Direction must be North, South, East, or West."}), 400
+        annotated = detect_frame(frame, camera_direction=requested_direction)
         ok, buffer = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
         if not ok:
             raise RuntimeError("Could not encode processed frame")
@@ -291,7 +295,7 @@ def api_cameras():
         configured.append({
             "id": str(entry.get("id", "")),
             "name": str(entry.get("name", entry.get("id", "Camera"))),
-            "direction": entry.get("direction", "North"),
+            "direction": active_camera_direction if str(entry.get("id")) == str(active_camera_id) else entry.get("direction", "North"),
             "source_type": source_type,
             "active": str(entry.get("id")) == str(active_camera_id)
         })
@@ -300,20 +304,26 @@ def api_cameras():
 
 @app.route("/api/cameras/select", methods=["POST"])
 def api_camera_select():
-    global active_camera_id, camera, camera_source_id
+    global active_camera_id, active_camera_direction, camera, camera_source_id
     payload = request.get_json(silent=True) or {}
     requested_id = str(payload.get("camera_id", "")).strip()
     if not any(str(entry.get("id")) == requested_id for entry in CAMERAS):
         return jsonify({"error": "Camera ID is not defined in camera_config.py."}), 400
+    requested_direction = str(payload.get("direction", "")).title()
+    if requested_direction and requested_direction not in DIRECTIONS:
+        return jsonify({"error": "Direction must be North, South, East, or West."}), 400
     with camera_lock:
         active_camera_id = requested_id
+        selected_entry = next(item for item in CAMERAS if str(item.get("id")) == requested_id)
+        active_camera_direction = requested_direction or selected_entry.get("direction", "North")
         if camera is not None:
             camera.release()
             camera = None
         camera_source_id = None
     return jsonify({
         "active_camera_id": active_camera_id,
-        "message": "Camera source selected. Open the server camera feed to connect."
+        "camera_direction": active_camera_direction,
+        "message": f"Camera source selected for {active_camera_direction}. Open or refresh the server camera feed."
     })
 
 
