@@ -98,7 +98,7 @@ Use `0`, `1`, etc. for USB camera indices, a reachable RTSP/HTTP stream URL for 
 
 ## Model and Evaluation Notes
 
-The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection runs on the full frame first and limits fallback crop inference to at most two larger vehicle crops to reduce latency. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation helps stabilize emergency decisions, but it does not guarantee perfect classification.
+The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection evaluates the full frame and up to three of the largest detected vehicle crops to improve recognition of small or distant emergency vehicles. A candidate label is not the same as confirmed emergency priority; priority requires consecutive-frame confirmation. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation helps stabilize emergency decisions, but it does not guarantee perfect classification.
 
 Vehicle speed is an estimate and depends on camera placement and calibration; it is not intended for enforcement. This project is an academic prototype and should be tested with representative day/night footage and fail-safe controls before any real-world signal deployment.
 
