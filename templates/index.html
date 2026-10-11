@@ -222,8 +222,10 @@ async function sendFrame() {
 
   if (video.readyState < 2 || !video.videoWidth) return;
 
-  canvas.width = 640;
-  canvas.height = Math.max(360, Math.round(640 * video.videoHeight / video.videoWidth));
+  // Preserve more detail for distant emergency vehicles while keeping
+  // the original camera aspect ratio.
+  canvas.width = 800;
+  canvas.height = Math.max(450, Math.round(800 * video.videoHeight / video.videoWidth));
   canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
   processing = true;
@@ -232,7 +234,7 @@ async function sendFrame() {
     const r = await fetch('/api/frame', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.68), direction: document.getElementById('browserCameraDirection').value})
+      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.72), direction: document.getElementById('browserCameraDirection').value})
     });
 
     const data = await r.json();
