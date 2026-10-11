@@ -71,6 +71,7 @@ class EmergencyDetector:
                 ])
                 self.available = True
             except Exception as exc:
+                self.model = None
                 self.error = str(exc)[:220]
                 self.available = False
                 # Avoid retrying a failed model download on every camera frame.
