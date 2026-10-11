@@ -19,7 +19,10 @@ class EmergencyDetector:
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
-        self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
+        # YOLO-World can score small emergency markings weakly in webcam frames.
+        # Keep the threshold configurable, with a slightly lower default; the
+        # consecutive-frame confirmation below reduces one-frame false alarms.
+        self.confidence = float(os.environ.get("EMERGENCY_CONF", min(confidence, 0.12)))
         self.consecutive_required = max(
             1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
         )
@@ -51,23 +54,32 @@ class EmergencyDetector:
                 # Without these, an ordinary van/bus/truck may be forced into
                 # one of the emergency prompts by the open-vocabulary model.
                 self.model.set_classes([
+                    # Keep emergency prompts explicit and varied. YOLO-World
+                    # is open-vocabulary and otherwise often maps an ambulance
+                    # to its closest generic vehicle class.
                     "ambulance",
-                    "emergency ambulance",
-                    "ambulance vehicle",
+                    "emergency medical ambulance",
+                    "ambulance with a red cross medical symbol",
+                    "white ambulance with red emergency markings",
+                    "ambulance with flashing emergency lights",
+                    "medical emergency response vehicle",
                     "ambulance van",
-                    "medical ambulance",
-                    "ambulance with emergency lights",
+                    "ambulance car",
                     "fire truck",
                     "fire engine",
-                    "firefighting truck",
-                    "fire department engine",
+                    "firefighting vehicle",
                     "fire rescue truck",
+                    "fire department engine",
+                    # Contrast classes prevent ordinary traffic from being
+                    # forced into an emergency class.
                     "ordinary passenger car",
                     "police car",
                     "city bus",
+                    "public transit bus",
                     "delivery van",
                     "cargo truck",
                     "semi truck",
+                    "ordinary box truck",
                 ])
                 self.available = True
             except Exception as exc:
@@ -157,7 +169,9 @@ class EmergencyDetector:
             image,
             conf=self.confidence,
             iou=0.45,
-            imgsz=800,
+            # Higher resolution helps with distant ambulances and small
+            # emergency markings in browser-camera frames.
+            imgsz=1024,
             verbose=False,
         )[0]
 
@@ -184,11 +198,13 @@ class EmergencyDetector:
                 key=lambda item: max(0, item["box"][2] - item["box"][0]) *
                                  max(0, item["box"][3] - item["box"][1]),
                 reverse=True,
-            )[:3]
+            )[:5]
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
-                pad_x = max(8, int((x2 - x1) * 0.20))
-                pad_y = max(8, int((y2 - y1) * 0.20))
+                # Give the classifier more context (lights, markings and body
+                # shape) while enlarging the vehicle crop for fine details.
+                pad_x = max(12, int((x2 - x1) * 0.35))
+                pad_y = max(12, int((y2 - y1) * 0.35))
                 cx1 = max(0, x1 - pad_x)
                 cy1 = max(0, y1 - pad_y)
                 cx2 = min(width, x2 + pad_x)
