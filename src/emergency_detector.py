@@ -15,7 +15,7 @@ class EmergencyDetector:
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
 
-    def __init__(self, model_path=None, confidence=0.25, consecutive_required=2, miss_tolerance=2):
+    def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
@@ -46,14 +46,20 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
+                # YOLO-World is open-vocabulary; include common visual names
+                # because emergency vehicles are often labeled as vans/trucks.
                 self.model.set_classes([
                     "ambulance",
                     "emergency ambulance",
                     "ambulance vehicle",
                     "ambulance van",
+                    "medical ambulance",
+                    "ambulance with emergency lights",
                     "fire truck",
                     "fire engine",
                     "firefighting truck",
+                    "fire department engine",
+                    "fire rescue truck",
                 ])
                 self.available = True
             except Exception as exc:
@@ -88,7 +94,10 @@ class EmergencyDetector:
         label = str(raw_label).lower().strip()
         if "ambulance" in label:
             return "ambulance"
-        if "fire truck" in label or "fire engine" in label:
+        if any(term in label for term in (
+            "fire truck", "fire engine", "firefighting", "fire fighting",
+            "fire department", "fire rescue", "fire apparatus",
+        )):
             return "fire truck"
         if "bus" in label:
             return "bus"
@@ -114,7 +123,7 @@ class EmergencyDetector:
             image,
             conf=self.confidence,
             iou=0.45,
-            imgsz=640,
+            imgsz=800,
             verbose=False,
         )[0]
 
@@ -146,7 +155,7 @@ class EmergencyDetector:
                     key=lambda item: max(0, item["box"][2] - item["box"][0]) *
                                      max(0, item["box"][3] - item["box"][1]),
                     reverse=True,
-                )[:2]
+                )[:3]
                 for item in largest_boxes:
                     x1, y1, x2, y2 = item["box"]
                     pad_x = max(8, int((x2 - x1) * 0.15))
