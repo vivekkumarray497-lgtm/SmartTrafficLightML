@@ -25,6 +25,7 @@ from vision_engine import VisionEngine
 from adaptive_controller import AdaptiveController
 from analytics_store import AnalyticsStore
 from emergency_detector import EmergencyDetector
+from camera_config import CAMERAS, ACTIVE_CAMERA_ID
 
 model = joblib.load(MODEL_PATH)
 yolo_model = YOLO(YOLO_MODEL_PATH)
@@ -34,6 +35,8 @@ controller = AdaptiveController()
 analytics = AnalyticsStore(HISTORY_PATH)
 
 camera = None
+camera_source_id = None
+active_camera_id = ACTIVE_CAMERA_ID
 camera_lock = threading.Lock()
 state_lock = threading.Lock()
 frame_lock = threading.Lock()
@@ -55,14 +58,28 @@ traffic_data = {
 
 
 def get_camera():
-    global camera
+    global camera, camera_source_id
     with camera_lock:
-        if camera is not None and camera.isOpened():
+        entry = next((item for item in CAMERAS if str(item.get("id")) == str(active_camera_id)), None)
+        if entry is None:
+            return None
+        source_id = str(entry.get("id"))
+        if camera is not None and camera_source_id == source_id and camera.isOpened():
             return camera
-        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        if not camera.isOpened():
+        if camera is not None:
             camera.release()
-            camera = cv2.VideoCapture(0)
+            camera = None
+        source = entry.get("source", 0)
+        if isinstance(source, str) and source.isdigit():
+            source = int(source)
+        if isinstance(source, int) and os.name == "nt":
+            camera = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+            if not camera.isOpened():
+                camera.release()
+                camera = cv2.VideoCapture(source)
+        else:
+            camera = cv2.VideoCapture(source)
+        camera_source_id = source_id if camera.isOpened() else None
         if camera.isOpened():
             camera.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
             camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
@@ -197,14 +214,17 @@ def api_state():
 def api_health():
     with camera_lock:
         server_camera = camera is not None and camera.isOpened()
+    base_models_ready = model is not None and yolo_model is not None
     return jsonify({
-        "status": "ok",
+        "status": "ok" if base_models_ready else "degraded",
         "server_camera": server_camera,
         "browser_camera": True,
-        "model": True,
+        "model": model is not None,
+        "vehicle_detector": yolo_model is not None,
         "emergency_detector": emergency_detector.available,
         "emergency_detector_loaded": emergency_detector.model is not None,
-        "emergency_detector_error": emergency_detector.error
+        "emergency_detector_error": emergency_detector.error,
+        "active_camera_id": active_camera_id
     })
 
 
