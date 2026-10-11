@@ -4,13 +4,15 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Smart Traffic Control Center</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f3f6fa;color:#172033}header{background:#111827;color:#fff;padding:20px;text-align:center}header h1{margin:0 0 6px}.container{width:94%;max-width:1250px;margin:22px auto}.grid{display:grid;grid-template-columns:2fr 1fr;gap:18px}.card{background:#fff;padding:18px;border-radius:14px;box-shadow:0 3px 14px rgba(0,0,0,.08);margin-bottom:18px}.camera{width:100%;background:#111;border-radius:10px;display:block}.signal{text-align:center;font-size:30px;font-weight:bold;padding:16px;border-radius:12px}.green{background:#dcfce7;color:#166534}.red{background:#fee2e2;color:#991b1b}.yellow{background:#fef3c7;color:#92400e}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{background:#eef2ff;padding:15px;text-align:center;border-radius:10px}.stat strong{display:block;font-size:25px;margin-top:5px}.directions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.direction{padding:14px;border-radius:10px;background:#f1f5f9;text-align:center}.direction.active{background:#dcfce7;border:2px solid #16a34a}.bar{height:9px;background:#e5e7eb;border-radius:10px;overflow:hidden;margin-top:7px}.bar span{display:block;height:100%;background:#2563eb;width:0}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{display:block;margin-top:10px;font-weight:bold}input,select{width:100%;padding:9px;margin-top:4px;border:1px solid #cbd5e1;border-radius:7px}button{margin-top:15px;padding:11px 18px;background:#2563eb;color:#fff;border:0;border-radius:8px;cursor:pointer}.emergency{padding:12px;border-radius:9px;background:#ecfdf5;color:#166534;font-weight:bold}.priority{background:#fee2e2;color:#991b1b}.muted{color:#64748b;font-size:14px}.error{background:#fee2e2;color:#991b1b;padding:10px;border-radius:8px}@media(max-width:900px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.directions{grid-template-columns:repeat(2,1fr)}}
-.status-pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);padding:9px 13px;border-radius:999px;font-size:13px}.emergency-panel{border:2px solid #fecaca;background:#fff7f7}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.danger{background:#b91c1c}.secondary{background:#475569}.tag{display:inline-block;padding:4px 8px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:12px;font-weight:700}@media(max-width:600px){header{display:block}.status-pill{display:inline-block;margin-top:10px}} </style>
+:root{color-scheme:dark;--bg:#080d18;--line:#263650;--text:#e7eefb;--muted:#91a2bd;--blue:#60a5fa}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at 15% 0%,#17233b 0,#080d18 42%);color:var(--text);min-height:100vh}header{padding:22px max(3%,calc((100% - 1500px)/2));display:flex;align-items:center;justify-content:space-between;gap:16px;background:rgba(9,15,28,.88);border-bottom:1px solid var(--line);text-align:left;position:sticky;top:0;z-index:5;backdrop-filter:blur(14px)}header h1{font-size:clamp(21px,2.4vw,30px);margin:0 0 7px;letter-spacing:-.5px}header .subtitle{margin:0;color:var(--muted);font-size:13px}.container{width:94%;max-width:1500px;margin:24px auto}.grid{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(300px,1fr);gap:18px}.card{background:linear-gradient(145deg,rgba(20,31,51,.96),rgba(14,23,39,.98));border:1px solid var(--line);padding:20px;border-radius:18px;box-shadow:0 12px 34px rgba(0,0,0,.2);margin-bottom:18px;min-width:0}.card h2{font-size:17px;margin:0 0 16px;letter-spacing:.1px}.card h3{font-size:15px;margin:18px 0 8px}.camera{width:100%;background:#030712;border:1px solid #28364d;border-radius:12px;display:block;min-height:80px;object-fit:contain}.signal{text-align:center;font-size:29px;font-weight:800;padding:18px;border-radius:13px;border:1px solid transparent;letter-spacing:1px}.green{background:#063b30;color:#6ee7b7;border-color:#087f5b}.red{background:#481a28;color:#fda4af;border-color:#9f1239}.yellow{background:#493513;color:#fde68a;border-color:#a16207}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.stat{background:linear-gradient(145deg,#172741,#111d31);padding:14px;border:1px solid #263955;text-align:left;border-radius:12px;color:#a9bad3;font-size:12px}.stat strong{display:block;font-size:25px;color:#f1f5ff;margin-top:7px;font-weight:750;letter-spacing:-.5px}.directions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.direction{padding:14px 11px;border-radius:12px;background:#111c2e;border:1px solid #263650;text-align:center;color:#aebed5}.direction b{color:#e6eefc}.direction.active{background:#07382f;border:1px solid #10b981;color:#a7f3d0;box-shadow:inset 0 0 0 1px rgba(16,185,129,.12)}.bar{height:7px;background:#26344a;border-radius:10px;overflow:hidden;margin-top:10px}.bar span{display:block;height:100%;background:linear-gradient(90deg,#3b82f6,#22d3ee);width:0;border-radius:10px;transition:width .3s}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}label{display:block;margin-top:10px;font-weight:650;font-size:12px;color:#aebed5}input,select{width:100%;padding:11px;margin-top:6px;background:#0b1424;color:var(--text);border:1px solid #33445f;border-radius:9px;outline:none}input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 2px #60a5fa22}button{margin-top:12px;padding:10px 14px;background:#2563eb;color:#fff;border:1px solid #3b82f6;border-radius:9px;cursor:pointer;font-weight:700;font-size:12px;transition:filter .2s,transform .2s}button:hover{filter:brightness(1.15);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none}.emergency{padding:13px;border-radius:10px;background:#073b31;border:1px solid #087f5b;color:#6ee7b7;font-weight:750;font-size:13px}.priority{background:#4a1726;border-color:#be123c;color:#fecdd3;animation:pulse 1.6s infinite}.muted{color:var(--muted);font-size:12px;line-height:1.6}.error{background:#4a1726;color:#fecdd3;padding:12px;border:1px solid #be123c;border-radius:9px}.status-pill{background:#0b332d;border:1px solid #146c54;color:#6ee7b7;padding:9px 12px;border-radius:999px;font-size:12px;white-space:nowrap}.emergency-panel{border-color:#7f1d36}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.danger{background:#be123c;border-color:#e11d48}.secondary{background:#334155;border-color:#475569}.tag{display:inline-block;padding:6px 9px;border-radius:999px;background:#132541;border:1px solid #294469;color:#93c5fd;font-size:10px;font-weight:800;letter-spacing:.5px}.mode-switch{display:flex;gap:8px;flex-wrap:wrap}.mode-switch button{min-width:110px}.mode-switch .selected{background:#065f46;border-color:#10b981;color:#a7f3d0}.signal-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;color:#9fb0c9;font-size:12px}.chart-wrap{height:250px;position:relative}.chart-wrap canvas{width:100%;height:100%;display:block}.chart-legend{color:var(--muted);font-size:12px;margin-top:8px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.section-head h2{margin-bottom:12px}.pill-small{display:inline-block;padding:4px 8px;border-radius:99px;background:#202e43;color:#c6d5e9;font-size:11px}.form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.form-grid>div{min-width:0}@keyframes pulse{50%{box-shadow:0 0 0 5px rgba(244,63,94,.09)}}@media(max-width:1000px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){header{position:static;align-items:flex-start;flex-direction:column}.container{width:92%;margin:16px auto}.card{padding:15px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.directions{grid-template-columns:repeat(2,minmax(0,1fr))}.row,.form-grid{grid-template-columns:1fr 1fr}.signal{font-size:24px}}
+</style>
 </head>
 <body>
-<header><div><h1>🚦 Smart Traffic Control Center</h1><div>AI + YOLO Based Adaptive Traffic Signal Management</div></div><div class="status-pill">● SYSTEM ONLINE &nbsp;|&nbsp; ML CONTROL</div></header>
-<div class="container"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="tag">LIVE MONITORING</span><span class="tag">4-DIRECTION CONTROL</span><span class="tag">EMERGENCY PRIORITY</span></div>
+<header><div><h1>🚦 Smart Traffic <span style="color:#60a5fa">Control Center</span></h1><div class="subtitle">AI-powered intersection monitoring · YOLO vision · Adaptive signal management</div></div><div class="status-pill" id="systemStatus">● DASHBOARD READY</div></header>
+<div class="container"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"><span class="tag">LIVE MONITORING</span><span class="tag">4-DIRECTION CONTROL</span><span class="tag">EMERGENCY PRIORITY</span><span class="tag">TRAFFIC ANALYTICS</span></div>
 {% if state.error %}<div class="error">{{state.error}}</div>{% endif %}
+<div class="card"><div class="section-head"><h2>⚙️ Signal Control Mode</h2><span class="pill-small" id="modeBadge">AUTO MODE</span></div><p class="muted">Auto mode uses the adaptive traffic controller. Manual mode is for project demonstration only and does not control real road hardware.</p><div class="mode-switch"><button type="button" id="autoModeBtn" class="selected" onclick="setMode('Auto')">⚡ Auto Mode</button><button type="button" id="manualModeBtn" class="secondary" onclick="setMode('Manual')">✋ Manual Mode</button></div><div class="row"><div><label for="manualDirection">Manual green direction</label><select id="manualDirection"><option>North</option><option>South</option><option>East</option><option>West</option></select></div><div><label>Manual action</label><button type="button" id="applyManualBtn" onclick="applyManualDirection()" disabled>Set Green Direction</button></div></div><p id="modeStatus" class="muted">Adaptive mode is active.</p></div>
 <div class="grid">
 <div>
 <div class="card"><h2>📷 Live Traffic Camera</h2>
@@ -34,18 +36,19 @@
 </div>
 <div class="card"><h2>📊 Live Traffic Metrics</h2><div class="stats">
 <div class="stat">Cars<strong id="cars">{{state.cars}}</strong></div><div class="stat">Bikes<strong id="bikes">{{state.bikes}}</strong></div><div class="stat">Buses<strong id="buses">{{state.buses}}</strong></div><div class="stat">Trucks<strong id="trucks">{{state.trucks}}</strong></div>
-<div class="stat">Total<strong id="traffic">{{state.traffic}}</strong></div><div class="stat">Pedestrians<strong id="pedestrians">{{state.pedestrians}}</strong></div><div class="stat">Approx. Speed<strong id="speed">{{state.speed}}</strong></div><div class="stat">Density<strong id="density">{{state.density}}</strong></div>
+<div class="stat">Total Vehicles<strong id="traffic">{{state.traffic}}</strong></div><div class="stat">Pedestrians<strong id="pedestrians">{{state.pedestrians}}</strong></div><div class="stat">Approx. Speed<strong id="speed">{{state.speed}}</strong></div><div class="stat">Density<strong id="density">{{state.density}}</strong></div><div class="stat">Queue Estimate<strong id="queue_length">{{state.queue_length}}</strong></div><div class="stat">Avg. Wait (s)<strong id="avg_waiting_time">{{state.avg_waiting_time}}</strong></div>
 </div></div>
-<div class="card"><h2>🧭 Four-Direction Adaptive Control</h2><div class="directions" id="directions"></div><p><b>Active direction:</b> <span id="active">{{state.active_direction}}</span> &nbsp; <b>Green time:</b> <span id="green_time">{{state.green_time}}</span>s</p></div>
+<div class="card"><h2>🧭 Four-Direction Adaptive Control</h2><div class="directions" id="directions"></div><div class="signal-meta"><span>Active direction: <b id="active">{{state.active_direction}}</b></span><span>Green duration: <b id="green_time">{{state.green_time}}</b>s</span><span>Re-evaluation in: <b id="countdown">{{state.countdown}}</b>s</span></div></div>
 </div>
 <div>
-<div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
+<div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><div class="signal-meta"><span>Mode: <b id="signalMode">{{state.mode}}</b></span><span>Timer: <b id="signalCountdown">{{state.countdown}}</b>s</span></div><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
 <div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted">The system automatically detects Ambulance and Fire Truck from the camera and activates direction-aware GREEN priority. Police vehicles are not treated as emergency vehicles.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
 <div class="card"><h2>🤖 ML Signal Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Random Forest prediction is demonstrated separately; the live controller uses YOLO traffic counts and adaptive priority.</p></div>
 </div></div>
 <div class="card"><h2>🧪 Manual ML Prediction</h2><form action="{{url_for('predict')}}" method="post">
 <div class="row"><div><label>Location ID</label><input type="number" name="location_id" value="1" required></div><div><label>Traffic Volume</label><input type="number" step="0.01" name="traffic_volume" value="10" required></div><div><label>Average Vehicle Speed</label><input type="number" step="0.01" name="avg_vehicle_speed" value="30" required></div><div><label>Cars</label><input type="number" name="vehicle_count_cars" value="5" required></div><div><label>Trucks</label><input type="number" name="vehicle_count_trucks" value="1" required></div><div><label>Bikes</label><input type="number" name="vehicle_count_bikes" value="2" required></div><div><label>Weather</label><select name="weather_condition"><option>Sunny</option><option>Cloudy</option><option>Rainy</option><option>Foggy</option><option>Windy</option></select></div><div><label>Temperature</label><input type="number" step="0.01" name="temperature" value="25" required></div><div><label>Humidity</label><input type="number" step="0.01" name="humidity" value="60" required></div><div><label>Accident</label><select name="accident_reported"><option value="0">No</option><option value="1">Yes</option></select></div><div><label>Hour</label><input type="number" name="hour" value="12" min="0" max="23" required></div><div><label>Minute</label><input type="number" name="minute" value="0" min="0" max="59" required></div><div><label>Day</label><input type="number" name="day" value="1" min="1" max="31" required></div><div><label>Month</label><input type="number" name="month" value="1" min="1" max="12" required></div><div><label>Emergency</label><select name="emergency_detected"><option value="0">No</option><option value="1">Yes</option></select></div></div><button type="submit">🚦 Predict Signal</button></form></div>
 </div>
+<div class="card"><div class="section-head"><h2>📈 Traffic History</h2><span class="pill-small">LAST 40 RECORDS</span></div><div class="chart-wrap"><canvas id="trafficChart" width="1000" height="300" aria-label="Traffic count history chart"></canvas></div><div class="chart-legend" id="chartSummary">Waiting for recorded traffic history…</div><p class="muted">Chart is drawn from the app’s CSV history endpoint. It will populate as frames are processed.</p></div>
 <script>
 let emergency = false;
 let cameraStream = null;
@@ -53,7 +56,7 @@ let captureTimer = null;
 let processing = false;
 
 function render(s) {
-  ['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','active','green_time','updated','ml']
+  ['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','queue_length','avg_waiting_time','active','green_time','countdown','updated','ml','mode']
     .forEach(k => {
       const e = document.getElementById(k);
       if (e && s[k] !== undefined) e.textContent = s[k];
@@ -64,6 +67,14 @@ function render(s) {
   sig.className = 'signal ' + s.signal.toLowerCase();
 
   document.getElementById('message').textContent = s.signal_message;
+  document.getElementById('signalCountdown').textContent = s.countdown ?? 0;
+  document.getElementById('signalMode').textContent = s.mode || 'Auto';
+  document.getElementById('modeBadge').textContent = (s.mode || 'Auto').toUpperCase() + ' MODE';
+  document.getElementById('autoModeBtn').className = (s.mode || 'Auto') === 'Auto' ? 'selected' : 'secondary';
+  document.getElementById('manualModeBtn').className = s.mode === 'Manual' ? 'selected' : 'secondary';
+  document.getElementById('applyManualBtn').disabled = s.mode !== 'Manual';
+  document.getElementById('modeStatus').textContent = s.mode === 'Manual' ? 'Manual demo mode: selected direction is shown GREEN.' : 'Auto mode: adaptive controller selects the priority direction.';
+  document.getElementById('systemStatus').textContent = '● ' + (cameraStream ? 'BROWSER CAMERA ACTIVE' : 'DASHBOARD READY');
 
   const em = document.getElementById('emergency');
   em.textContent = s.emergency ? ('🚨 ' + (s.emergency_type === 'fire_truck' ? 'FIRE TRUCK' : 'AMBULANCE') + ' DETECTED — AUTOMATIC PRIORITY ACTIVE') : '🟢 Monitoring for Ambulance / Fire Truck';
@@ -238,6 +249,61 @@ async function sendFrame() {
     processing = false;
   }
 }
+
+async function setMode(mode) {
+  const status = document.getElementById('modeStatus');
+  try {
+    const response = await fetch('/api/mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not change mode');
+    status.textContent = data.message;
+    await refresh();
+  } catch (error) { status.textContent = 'Mode change failed: ' + error.message; }
+}
+
+async function applyManualDirection() {
+  const direction = document.getElementById('manualDirection').value;
+  const status = document.getElementById('modeStatus');
+  try {
+    const response = await fetch('/api/manual-control', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({direction})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not set direction');
+    status.textContent = data.message;
+    await refresh();
+  } catch (error) { status.textContent = 'Manual control failed: ' + error.message; }
+}
+
+async function loadTrafficHistory() {
+  try {
+    const response = await fetch('/api/history', {cache:'no-store'});
+    if (!response.ok) throw new Error('History endpoint unavailable');
+    drawTrafficChart(await response.json());
+  } catch (error) { document.getElementById('chartSummary').textContent = 'History unavailable: ' + error.message; }
+}
+
+function drawTrafficChart(rows) {
+  const canvas = document.getElementById('trafficChart');
+  const ctx = canvas.getContext('2d');
+  const width = Math.max(320, canvas.clientWidth || 900);
+  const height = Math.max(180, canvas.clientHeight || 250);
+  const scale = window.devicePixelRatio || 1;
+  canvas.width = width * scale; canvas.height = height * scale;
+  ctx.scale(scale, scale); ctx.clearRect(0, 0, width, height);
+  const data = (rows || []).map(row => ({label:(row.timestamp || '').slice(11,19), value:Number(row.total_vehicles || 0)}));
+  if (!data.length) { ctx.fillStyle='#91a2bd'; ctx.font='13px Segoe UI, Arial'; ctx.fillText('No history yet — start a camera to record traffic.', 16, height/2); document.getElementById('chartSummary').textContent='No recorded traffic samples yet.'; return; }
+  const pad={l:36,r:12,t:14,b:30}, plotW=width-pad.l-pad.r, plotH=height-pad.t-pad.b;
+  const max=Math.max(1,...data.map(d=>d.value));
+  ctx.font='11px Segoe UI, Arial'; ctx.strokeStyle='#263650'; ctx.fillStyle='#91a2bd'; ctx.lineWidth=1;
+  for(let i=0;i<4;i++){const y=pad.t+plotH*i/3;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(width-pad.r,y);ctx.stroke();ctx.fillText(String(Math.round(max*(1-i/3))),4,y+4);}
+  const points=data.map((d,i)=>({x:pad.l+(data.length===1?plotW/2:i*plotW/(data.length-1)),y:pad.t+plotH-(d.value/max)*plotH}));
+  ctx.beginPath(); points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.strokeStyle='#60a5fa';ctx.lineWidth=2.5;ctx.stroke();
+  points.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,2.5,0,Math.PI*2);ctx.fillStyle='#67e8f9';ctx.fill();});
+  ctx.fillStyle='#91a2bd';ctx.fillText(data[0].label || 'Start',pad.l,height-8);ctx.fillText(data[data.length-1].label || 'Latest',Math.max(pad.l,width-pad.r-50),height-8);
+  const latest=data[data.length-1].value;document.getElementById('chartSummary').textContent=data.length+' recorded samples · latest '+latest+' vehicles · peak '+max+' vehicles.';
+}
+
+loadTrafficHistory(); setInterval(loadTrafficHistory, 10000);
+window.addEventListener('resize', loadTrafficHistory);
 
 window.addEventListener('beforeunload', () => {
   if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
