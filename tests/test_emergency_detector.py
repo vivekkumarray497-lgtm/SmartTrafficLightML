@@ -26,6 +26,20 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         ]
         self.assertEqual(len(EmergencyDetector._deduplicate(candidates)), 2)
 
+    def test_emergency_candidate_must_overlap_a_base_vehicle_box(self):
+        vehicle_boxes = [{"box": [100, 100, 220, 200]}]
+        self.assertTrue(
+            EmergencyDetector._matches_vehicle_box([110, 110, 210, 190], vehicle_boxes)
+        )
+        self.assertFalse(
+            EmergencyDetector._matches_vehicle_box([300, 300, 400, 400], vehicle_boxes)
+        )
+
+    def test_vehicle_overlap_filter_allows_full_frame_fallback_without_boxes(self):
+        self.assertTrue(
+            EmergencyDetector._matches_vehicle_box([10, 10, 80, 80], [])
+        )
+
     def test_direction_uses_frame_quadrants(self):
         self.assertEqual(EmergencyDetector._direction(90, 50, 200, 100), "West")
         self.assertEqual(EmergencyDetector._direction(150, 50, 200, 100), "East")
