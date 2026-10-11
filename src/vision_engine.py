@@ -149,14 +149,14 @@ class VisionEngine:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2
             )
 
-            if emergency:
-                cv2.rectangle(frame, (8, 8), (w - 8, 72), (0, 0, 255), -1)
-                cv2.putText(
-                    frame,
-                    f"!!! EMERGENCY: {emergency_type.upper()} | {emergency_direction.upper()} !!!",
-                    (20, 48),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2
-                )
+        if emergency:
+            cv2.rectangle(frame, (8, 8), (w - 8, 72), (0, 0, 255), -1)
+            cv2.putText(
+                frame,
+                f"!!! EMERGENCY: {emergency_type.upper()} | {emergency_direction.upper()} !!!",
+                (20, 48),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2
+            )
 
         total = sum(counts.values())
         avg_speed = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
