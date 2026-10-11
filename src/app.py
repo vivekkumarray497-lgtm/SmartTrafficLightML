@@ -40,6 +40,11 @@ camera_source_id = None
 active_camera_id = ACTIVE_CAMERA_ID
 _initial_camera = next((item for item in CAMERAS if str(item.get("id")) == str(ACTIVE_CAMERA_ID)), None)
 active_camera_direction = (_initial_camera or {}).get("direction", "North")
+control_mode = "Auto"
+manual_direction = "North"
+signal_started_at = time.time()
+signal_duration = 15
+last_signal_key = None
 camera_lock = threading.Lock()
 state_lock = threading.Lock()
 frame_lock = threading.Lock()
@@ -56,7 +61,8 @@ traffic_data = {
     "directions": {d: 0 for d in DIRECTIONS},
     "active_direction": "North", "green_time": 15,
     "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
-    "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0
+    "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
+    "mode": "Auto", "countdown": 15
 }
 
 
@@ -90,14 +96,25 @@ def get_camera():
 
 
 def update_state(metrics):
+    global signal_started_at, signal_duration, last_signal_key
     adaptive = controller.decide(
-        metrics["directions"],
-        metrics["pedestrians"],
-        metrics["emergency"],
+        metrics["directions"], metrics["pedestrians"], metrics["emergency"],
         metrics.get("emergency_direction")
     )
-    active = adaptive["active_direction"]
+    active = metrics.get("emergency_direction") if metrics["emergency"] and metrics.get("emergency_direction") in DIRECTIONS else (manual_direction if control_mode == "Manual" else adaptive["active_direction"])
     active_info = adaptive[active]
+    signal = "Green"
+    duration = 0 if control_mode == "Manual" else max(1, int(active_info["green_time"]))
+    signal_key = f"{control_mode}:{active}:{signal}"
+    now = time.time()
+    if signal_key != last_signal_key:
+        last_signal_key = signal_key
+        signal_started_at = now
+        signal_duration = duration or 15
+    elif now - signal_started_at >= max(1, signal_duration):
+        signal_started_at = now
+        signal_duration = duration or 15
+    countdown = 0 if control_mode == "Manual" else max(0, int(signal_duration - (now - signal_started_at)))
 
     with state_lock:
         traffic_data.update({
@@ -117,8 +134,10 @@ def update_state(metrics):
             "emergency_confidence": metrics.get("emergency_confidence", 0.0),
             "directions": dict(metrics["directions"]),
             "active_direction": active,
-            "green_time": active_info["green_time"] if active_info["signal"] == "Green" else 0,
-            "signal": "Green" if active_info["signal"] == "Green" else "Red",
+            "green_time": active_info["green_time"] if control_mode == "Auto" else 0,
+            "signal": signal,
+            "mode": control_mode,
+            "countdown": countdown,
             "signal_message": (
                 f"EMERGENCY PRIORITY - {metrics.get('emergency_type', 'Emergency').upper()} | {active} GREEN"
                 if metrics["emergency"]
@@ -242,6 +261,42 @@ def api_health():
 @app.route("/api/history")
 def api_history():
     return jsonify(analytics.recent(40))
+
+
+@app.route("/api/mode", methods=["POST"])
+def api_mode():
+    global control_mode, signal_started_at, last_signal_key
+    payload = request.get_json(silent=True) or {}
+    requested_mode = str(payload.get("mode", "")).strip().title()
+    if requested_mode not in {"Auto", "Manual"}:
+        return jsonify({"error": "Mode must be Auto or Manual."}), 400
+    control_mode = requested_mode
+    signal_started_at = time.time()
+    last_signal_key = None
+    with state_lock:
+        traffic_data["mode"] = control_mode
+    return jsonify({"mode": control_mode, "message": f"{control_mode} mode enabled."})
+
+
+@app.route("/api/manual-control", methods=["POST"])
+def api_manual_control():
+    global manual_direction, signal_started_at, last_signal_key
+    payload = request.get_json(silent=True) or {}
+    requested_direction = str(payload.get("direction", "")).strip().title()
+    if requested_direction not in DIRECTIONS:
+        return jsonify({"error": "Direction must be North, South, East, or West."}), 400
+    if control_mode != "Manual":
+        return jsonify({"error": "Switch to Manual mode before setting a signal."}), 409
+    manual_direction = requested_direction
+    signal_started_at = time.time()
+    last_signal_key = None
+    with state_lock:
+        traffic_data["active_direction"] = manual_direction
+        traffic_data["signal"] = "Green"
+        traffic_data["signal_message"] = f"MANUAL DEMO MODE — {manual_direction} selected GREEN"
+        traffic_data["mode"] = "Manual"
+        traffic_data["countdown"] = 0
+    return jsonify({"mode": control_mode, "active_direction": manual_direction, "signal": "Green", "message": f"{manual_direction} selected for manual demonstration."})
 
 
 @app.route("/api/frame", methods=["POST"])
