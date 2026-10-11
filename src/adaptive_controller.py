@@ -15,7 +15,7 @@ class AdaptiveController:
             scores = {d: directions[d] * 2 for d in self.DIRECTIONS}
             for d in ("North", "South"):
                 scores[d] += min(int(pedestrians), 5)
-            active = max(scores, key=scores.get)
+            active = max(self.DIRECTIONS, key=lambda direction: (scores[direction], direction == self.last_direction))
 
         self.last_direction = active
         result = {}
