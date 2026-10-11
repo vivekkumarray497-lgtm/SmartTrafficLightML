@@ -45,6 +45,11 @@ manual_direction = "North"
 signal_started_at = time.time()
 signal_duration = 15
 last_signal_key = None
+current_direction = "North"
+signal_phase = "Green"
+pending_direction = None
+phase_started_at = time.time()
+YELLOW_DURATION = 3
 camera_lock = threading.Lock()
 state_lock = threading.Lock()
 frame_lock = threading.Lock()
@@ -97,24 +102,70 @@ def get_camera():
 
 def update_state(metrics):
     global signal_started_at, signal_duration, last_signal_key
+    global current_direction, signal_phase, pending_direction, phase_started_at
+
     adaptive = controller.decide(
         metrics["directions"], metrics["pedestrians"], metrics["emergency"],
         metrics.get("emergency_direction")
     )
-    active = metrics.get("emergency_direction") if metrics["emergency"] and metrics.get("emergency_direction") in DIRECTIONS else (manual_direction if control_mode == "Manual" else adaptive["active_direction"])
-    active_info = adaptive[active]
-    signal = "Green"
-    duration = 0 if control_mode == "Manual" else max(1, int(active_info["green_time"]))
-    signal_key = f"{control_mode}:{active}:{signal}"
     now = time.time()
-    if signal_key != last_signal_key:
-        last_signal_key = signal_key
+    emergency_active = (
+        bool(metrics.get("emergency"))
+        and metrics.get("emergency_direction") in DIRECTIONS
+    )
+
+    if emergency_active:
+        # Emergency priority overrides normal timing in the demo controller.
+        target = metrics["emergency_direction"]
+        if current_direction != target or signal_phase != "Green":
+            signal_started_at = now
+            phase_started_at = now
+            signal_duration = 60
+        current_direction = target
+        pending_direction = None
+        signal_phase = "Green"
+    elif control_mode == "Manual":
+        current_direction = manual_direction
+        pending_direction = None
+        signal_phase = "Green"
         signal_started_at = now
-        signal_duration = duration or 15
-    elif now - signal_started_at >= max(1, signal_duration):
-        signal_started_at = now
-        signal_duration = duration or 15
-    countdown = 0 if control_mode == "Manual" else max(0, int(signal_duration - (now - signal_started_at)))
+        phase_started_at = now
+        signal_duration = 0
+    else:
+        target = adaptive["active_direction"]
+        if current_direction not in DIRECTIONS:
+            current_direction = target
+            signal_started_at = now
+            signal_duration = max(15, int(adaptive[target]["green_time"]))
+
+        if signal_phase == "Yellow":
+            pending_direction = target
+            if now - phase_started_at >= YELLOW_DURATION:
+                current_direction = pending_direction or target
+                pending_direction = None
+                signal_phase = "Green"
+                signal_started_at = now
+                signal_duration = max(15, int(adaptive[current_direction]["green_time"]))
+        elif now - signal_started_at >= max(1, signal_duration):
+            if target != current_direction:
+                pending_direction = target
+                signal_phase = "Yellow"
+                phase_started_at = now
+            else:
+                signal_started_at = now
+                signal_duration = max(15, int(adaptive[current_direction]["green_time"]))
+
+    active = current_direction
+    active_info = adaptive[active]
+    signal = signal_phase
+    if control_mode == "Manual":
+        countdown = 0
+    elif signal_phase == "Yellow":
+        countdown = max(0, int(YELLOW_DURATION - (now - phase_started_at)))
+    else:
+        countdown = max(0, int(signal_duration - (now - signal_started_at)))
+
+    last_signal_key = f"{control_mode}:{active}:{signal_phase}"
 
     with state_lock:
         traffic_data.update({
@@ -128,7 +179,7 @@ def update_state(metrics):
             "density": metrics["density"],
             "queue_length": metrics["queue_length"],
             "avg_waiting_time": metrics["avg_waiting_time"],
-            "emergency": metrics["emergency"],
+            "emergency": bool(metrics.get("emergency")),
             "emergency_type": metrics.get("emergency_type", ""),
             "emergency_direction": metrics.get("emergency_direction", ""),
             "emergency_confidence": metrics.get("emergency_confidence", 0.0),
@@ -140,18 +191,16 @@ def update_state(metrics):
             "countdown": countdown,
             "signal_message": (
                 f"EMERGENCY PRIORITY - {metrics.get('emergency_type', 'Emergency').upper()} | {active} GREEN"
-                if metrics["emergency"]
+                if emergency_active
                 else (f"MANUAL DEMO MODE - {active} GREEN" if control_mode == "Manual"
-                      else f"{active} direction selected by adaptive traffic priority")
+                      else (f"{active} direction changing - YELLOW clearance"
+                            if signal_phase == "Yellow"
+                            else f"{active} direction selected by adaptive traffic priority"))
             ),
-            "emergency_type": metrics.get("emergency_type", ""),
-            "emergency_direction": metrics.get("emergency_direction", ""),
             "updated_at": datetime.now().strftime("%H:%M:%S")
         })
-        signal = traffic_data["signal"]
 
     analytics.append(metrics, active, signal)
-
 
 def detect_frame(frame, camera_direction=None):
     with frame_lock:
@@ -168,11 +217,15 @@ def detect_frame(frame, camera_direction=None):
 
 
 def reset_state():
-    global signal_started_at, signal_duration, last_signal_key
+    global signal_started_at, signal_duration, last_signal_key, current_direction, signal_phase, pending_direction, phase_started_at
     signal_started_at = time.time()
     signal_duration = 15
     last_signal_key = None
     reset_direction = manual_direction if control_mode == "Manual" else "North"
+    current_direction = reset_direction
+    signal_phase = "Green"
+    pending_direction = None
+    phase_started_at = time.time()
     with state_lock:
         traffic_data.update({
             "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "traffic": 0,
