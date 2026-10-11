@@ -70,7 +70,7 @@ Edit `camera_config.py` and add another dictionary to `CAMERAS`:
 },
 ```
 
-Use `0`, `1`, etc. for USB camera indices, a reachable RTSP/HTTP stream URL for an IP camera, or a video file path for testing. Replace the sample URL and credentials with values from your camera; do not commit real passwords to a public repository. Set `ACTIVE_CAMERA_ID` to the source you want selected at startup. The dashboard's **Configured Server Cameras** selector switches between entries. Only one server-side camera source is active at a time; the browser camera path is separate. Cloud hosts cannot access a webcam physically attached to your personal computer, and IP streams must be reachable from the host.
+Use `0`, `1`, etc. for USB camera indices, a reachable RTSP/HTTP stream URL for an IP camera, or a video file path for testing. Replace the sample URL and credentials with values from your camera; do not commit real passwords to a public repository. Set `ACTIVE_CAMERA_ID` to the source you want selected at startup. The dashboard's **Configured Server Cameras** selector switches between entries. The configured direction is used for counts from that server camera, so set it to the lane/direction that camera actually watches. Only one server-side camera source is active at a time; the browser camera path is separate. Cloud hosts cannot access a webcam physically attached to your personal computer, and IP streams must be reachable from the host.
 
 ## API Endpoints
 
