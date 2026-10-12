@@ -4,7 +4,6 @@ from ultralytics import YOLO
 from traffic_density import calculate_traffic_density
 from signal_controller import get_signal_message
 
-
 MODEL_PATH = "yolo11n.pt"
 
 model = YOLO(MODEL_PATH)
@@ -18,11 +17,9 @@ if not cap.isOpened():
     print("Camera could not be opened.")
     exit()
 
-
 print("Smart Traffic Vehicle Tracker Started!")
 print("Tracking cars, motorcycles, buses and trucks.")
 print("Press Q or ESC to stop.")
-
 
 while True:
 
@@ -237,7 +234,6 @@ while True:
 
     if key == ord("q") or key == 27:
         break
-
 
 cap.release()
 cv2.destroyAllWindows()
