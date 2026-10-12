@@ -50,20 +50,21 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
-                # Include non-emergency alternatives as contrast classes.
-                # Without these, an ordinary van/bus/truck may be forced into
-                # one of the emergency prompts by the open-vocabulary model.
-                # Keep this model focused on the two priority classes. The
-                # normal YOLO model already detects cars, buses and trucks;
-                # putting 16+ overlapping generic/synonym prompts in the same
-                # YOLO-World class list diluted ambulance scores and encouraged
-                # ambulance -> bus/truck confusion.
+                # Include a small set of ordinary-vehicle contrast classes.
+                # This lets YOLO-World compare an ambulance/fire engine against
+                # likely lookalikes instead of forcing every vehicle into an
+                # emergency-only prompt. Avoid a long synonym list: it adds
+                # inference overhead without adding useful class separation.
                 self.model.set_classes([
                     "ambulance",
                     "ambulance with red cross markings",
                     "ambulance with emergency lights",
                     "fire truck",
                     "fire engine",
+                    "bus",
+                    "truck",
+                    "van",
+                    "police car",
                 ])
                 self.available = True
             except Exception as exc:
