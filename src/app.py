@@ -78,7 +78,8 @@ traffic_data = {
     "active_direction": "North", "green_time": 15,
     "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
     "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
-    "mode": "Auto", "countdown": 15
+    "mode": "Auto", "countdown": 15,
+    "live_confidence": None, "live_confidence_samples": 0
 }
 
 def evaluate_model_accuracy():
@@ -234,6 +235,8 @@ def update_state(metrics):
             "emergency_type": metrics.get("emergency_type", ""),
             "emergency_direction": metrics.get("emergency_direction", ""),
             "emergency_confidence": metrics.get("emergency_confidence", 0.0),
+            "live_confidence": metrics.get("live_confidence"),
+            "live_confidence_samples": metrics.get("live_confidence_samples", 0),
             "directions": dict(metrics["directions"]),
             "active_direction": active,
             "green_time": active_info["green_time"] if control_mode == "Auto" else 0,
@@ -289,6 +292,8 @@ def reset_state():
             "emergency_type": "",
             "emergency_direction": "",
             "emergency_confidence": 0.0,
+            "live_confidence": None,
+            "live_confidence_samples": 0,
             "mode": control_mode,
             "countdown": 0 if control_mode == "Manual" else 15,
             "updated_at": "Camera stopped"
