@@ -17,26 +17,12 @@ class EmergencyDetector:
     # Buses, trucks, vans, cars, and police are not emergency prompt classes.
     # These are wording variants of the two allowed emergency categories only.
     # YOLO-World can score a vehicle differently depending on the phrase used.
+    # Keep the open-vocabulary classifier focused on the two actual priority
+    # classes. A long list of near-duplicate ambulance phrases competes for the
+    # same detections and can lower the score for the correct class.
     PROMPT_CLASSES = [
         "ambulance",
-        "emergency ambulance vehicle",
-        "medical ambulance",
-        "ambulance van",
-        "white ambulance vehicle",
-        "ambulance with emergency lights",
-        "ambulance with red cross markings",
-        "white medical vehicle marked ambulance",
-        "road ambulance with medical markings",
-        "emergency medical transport ambulance",
-        "Indian ambulance vehicle",
-        "ambulance with blue flashing lights",
-        "ambulance with red stripes",
-        "patient rescue ambulance",
         "fire truck",
-        "fire engine",
-        "fire rescue truck",
-        "fire department fire truck",
-        "fire engine emergency vehicle",
     ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
