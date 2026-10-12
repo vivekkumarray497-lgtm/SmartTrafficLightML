@@ -26,7 +26,6 @@ def analyze_direction(
         "density": density
     }
 
-
 def analyze_all_directions(direction_data):
 
     result = {}
@@ -41,7 +40,6 @@ def analyze_all_directions(direction_data):
         )
 
     return result
-
 
 def get_priority_direction(direction_data):
 
@@ -62,7 +60,6 @@ def get_priority_direction(direction_data):
             highest_direction = direction
 
     return highest_direction
-
 
 if __name__ == "__main__":
 
