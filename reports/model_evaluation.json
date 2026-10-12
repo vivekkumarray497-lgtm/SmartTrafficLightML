@@ -1,0 +1,82 @@
+{
+  "generated_at_utc": "2026-10-12T10:35:15Z",
+  "dataset_rows_used": 2000,
+  "train_samples": 1600,
+  "test_samples": 400,
+  "split": "stratified 80/20, random_state=42",
+  "majority_baseline_accuracy": 0.355,
+  "previous_model_holdout_accuracy": 0.045,
+  "best_candidate_by_training_cv": "GradientBoosting",
+  "candidate_holdout_accuracy": 0.37,
+  "active_model_holdout_accuracy": 0.37,
+  "promoted_candidate": true,
+  "cross_validation": {
+    "ExtraTrees": {
+      "cv_mean_accuracy": 0.3275,
+      "cv_std": 0.0343
+    },
+    "RandomForest": {
+      "cv_mean_accuracy": 0.3325,
+      "cv_std": 0.0078
+    },
+    "GradientBoosting": {
+      "cv_mean_accuracy": 0.3362,
+      "cv_std": 0.01
+    },
+    "HistGradientBoosting": {
+      "cv_mean_accuracy": 0.3294,
+      "cv_std": 0.019
+    }
+  },
+  "classification_report": {
+    "Red": {
+      "precision": 0.4178082191780822,
+      "recall": 0.4485294117647059,
+      "f1-score": 0.4326241134751773,
+      "support": 136.0
+    },
+    "Yellow": {
+      "precision": 0.36129032258064514,
+      "recall": 0.39436619718309857,
+      "f1-score": 0.3771043771043771,
+      "support": 142.0
+    },
+    "Green": {
+      "precision": 0.31313131313131315,
+      "recall": 0.2540983606557377,
+      "f1-score": 0.28054298642533937,
+      "support": 122.0
+    },
+    "accuracy": 0.37,
+    "macro avg": {
+      "precision": 0.36407661829668014,
+      "recall": 0.3656646565345141,
+      "f1-score": 0.36342382566829795,
+      "support": 400.0
+    },
+    "weighted avg": {
+      "precision": 0.36581790954172744,
+      "recall": 0.37,
+      "f1-score": 0.3665298633133427,
+      "support": 400.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      61,
+      50,
+      25
+    ],
+    [
+      43,
+      56,
+      43
+    ],
+    [
+      42,
+      49,
+      31
+    ]
+  ],
+  "note": "This evaluates the tabular signal_status labels only. It is not live-camera or emergency-detection accuracy."
+}
