@@ -12,7 +12,15 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
     def test_emergency_prompts_use_one_canonical_name_per_category(self):
         self.assertEqual(
             EmergencyDetector.PROMPT_CLASSES,
-            ["ambulance", "fire truck", "bus", "truck", "van", "car", "police car"],
+            [
+                "ambulance emergency medical vehicle with medical markings",
+                "fire truck fire engine emergency firefighting vehicle",
+                "city bus passenger bus",
+                "commercial goods truck",
+                "passenger van",
+                "ordinary passenger car",
+                "police car law enforcement vehicle",
+            ],
         )
 
     def test_default_emergency_confidence_is_not_forced_to_very_low_value(self):
