@@ -13,13 +13,14 @@ class EmergencyDetector:
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
+    PROMPT_CLASSES = ["ambulance", "fire truck", "bus", "truck", "van", "car", "police car"]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
 
-        self.confidence = float(os.environ.get("EMERGENCY_CONF", min(confidence, 0.08)))
+        self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
         self.consecutive_required = max(
             1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
         )
@@ -48,17 +49,7 @@ class EmergencyDetector:
             try:
                 self.model = YOLOWorld(self.model_path)
 
-                self.model.set_classes([
-                    "ambulance",
-                    "ambulance with red cross markings",
-                    "ambulance with emergency lights",
-                    "fire truck",
-                    "fire engine",
-                    "bus",
-                    "truck",
-                    "van",
-                    "police car",
-                ])
+                self.model.set_classes(self.PROMPT_CLASSES)
                 self.available = True
             except Exception as exc:
                 self.model = None
