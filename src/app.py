@@ -18,6 +18,14 @@ HISTORY_PATH = os.path.join(BASE_DIR, "data", "traffic_history.csv")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+
+@app.after_request
+def disable_dashboard_caching(response):
+    # Ensure cloud/browser clients receive the latest dashboard after deployment.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE_DIR)
 
