@@ -6,7 +6,6 @@ emergency vehicles. A production implementation should use a custom trained
 emergency-vehicle detector.
 """
 
-
 def emergency_priority(enabled: bool = False) -> dict:
     """Return the signal action for the manually controlled emergency demo."""
     return {
