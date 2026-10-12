@@ -13,7 +13,15 @@ class EmergencyDetector:
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
-    PROMPT_CLASSES = ["ambulance", "fire truck", "bus", "truck", "van", "car", "police car"]
+    PROMPT_CLASSES = [
+        "ambulance emergency medical vehicle with medical markings",
+        "fire truck fire engine emergency firefighting vehicle",
+        "city bus passenger bus",
+        "commercial goods truck",
+        "passenger van",
+        "ordinary passenger car",
+        "police car law enforcement vehicle",
+    ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
         self.model_path = model_path or os.environ.get(
