@@ -1,7 +1,7 @@
 import os
 import threading
 import time
-from ultralytics import YOLOWorld
+from ultralytics import YOLO, YOLOWorld
 
 class EmergencyDetector:
     """
@@ -29,6 +29,12 @@ class EmergencyDetector:
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
+        # Set EMERGENCY_MODEL_TYPE=custom when EMERGENCY_MODEL_PATH points to
+        # weights trained with ambulance/fire-truck classes. YOLO-World remains
+        # the backwards-compatible default, but is only a zero-shot fallback.
+        self.model_type = os.environ.get("EMERGENCY_MODEL_TYPE", "world").strip().lower()
+        if self.model_type not in {"world", "custom"}:
+            self.model_type = "world"
 
         self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
         self.consecutive_required = max(
@@ -57,10 +63,19 @@ class EmergencyDetector:
             if self.model is not None or time.monotonic() < self._next_load_attempt:
                 return
             try:
-                self.model = YOLOWorld(self.model_path)
-
-                self.model.set_classes(self.PROMPT_CLASSES)
+                if self.model_type == "custom":
+                    self.model = YOLO(self.model_path)
+                else:
+                    self.model = YOLOWorld(self.model_path)
+                    self.model.set_classes(self.PROMPT_CLASSES)
                 self.available = True
+                self.error = ""
+                if os.environ.get("EMERGENCY_DEBUG", "").strip().lower() in {"1", "true", "yes"}:
+                    print(
+                        f"[emergency-ai] loaded type={self.model_type} "
+                        f"weights={self.model_path} classes={getattr(self.model, 'names', {})}",
+                        flush=True,
+                    )
             except Exception as exc:
                 self.model = None
                 self.error = str(exc)[:220]
@@ -330,6 +345,8 @@ class EmergencyDetector:
 
             self.error = str(exc)[:220]
             self.available = self.model is not None
+            if os.environ.get("EMERGENCY_DEBUG", "").strip().lower() in {"1", "true", "yes"}:
+                print(f"[emergency-ai:error] {self.error}", flush=True)
             self._streak = 0
             self._misses = 0
             self._last_type = ""
