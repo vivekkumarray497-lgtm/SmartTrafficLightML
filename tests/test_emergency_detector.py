@@ -10,6 +10,20 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         self.assertEqual(EmergencyDetector._label("police car"), "car")
         self.assertEqual(EmergencyDetector._label("city bus"), "bus")
 
+    def test_ordinary_vehicles_and_police_never_map_to_emergency_priority(self):
+        for label, expected in (
+            ("police car", "car"),
+            ("city bus", "bus"),
+            ("delivery truck", "truck"),
+            ("passenger van", "van"),
+            ("fire engine", "fire truck"),
+            ("ambulance with red cross markings", "ambulance"),
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(EmergencyDetector._label(label), expected)
+                if expected not in EmergencyDetector.EMERGENCY_LABELS:
+                    self.assertNotIn(expected, EmergencyDetector.EMERGENCY_LABELS)
+
     def test_overlapping_full_frame_and_crop_boxes_are_deduplicated(self):
         candidates = [
             {"label": "ambulance", "confidence": 0.31, "direction": "East", "box": [10, 10, 110, 100]},
