@@ -75,21 +75,6 @@ class EmergencyDetector:
         return "South" if dy > 0 else "North"
 
     @staticmethod
-    def _iou(a, b):
-        ax1, ay1, ax2, ay2 = a
-        bx1, by1, bx2, by2 = b
-        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-        iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
-        intersection = iw * ih
-        if intersection <= 0:
-            return 0.0
-        area_a = max(0, ax2 - ax1) * max(0, ay2 - ay1)
-        area_b = max(0, bx2 - bx1) * max(0, by2 - by1)
-        union = area_a + area_b - intersection
-        return intersection / union if union else 0.0
-
-    @staticmethod
     def _label(raw_label):
         label = str(raw_label).lower().strip()
         if "ambulance" in label:
@@ -108,30 +93,6 @@ class EmergencyDetector:
         if "car" in label:
             return "car"
         return ""
-
-    @classmethod
-    def _matches_vehicle_box(cls, candidate_box, traffic_boxes, threshold=0.15):
-        """Require an emergency box to overlap a vehicle found by the base detector."""
-        if not traffic_boxes:
-            return True
-        for vehicle in traffic_boxes:
-            vehicle_box = vehicle.get("box")
-            if not vehicle_box or len(vehicle_box) != 4:
-                continue
-            if cls._iou(candidate_box, vehicle_box) >= threshold:
-                return True
-
-            x1, y1, x2, y2 = candidate_box
-            vx1, vy1, vx2, vy2 = vehicle_box
-            intersection = max(0, min(x2, vx2) - max(x1, vx1)) * max(
-                0, min(y2, vy2) - max(y1, vy1)
-            )
-            area_a = max(0, x2 - x1) * max(0, y2 - y1)
-            area_b = max(0, vx2 - vx1) * max(0, vy2 - vy1)
-            smaller = min(area_a, area_b)
-            if smaller > 0 and intersection / smaller >= threshold:
-                return True
-        return False
 
     @staticmethod
     def _deduplicate(candidates, overlap_threshold=0.55):
@@ -163,6 +124,19 @@ class EmergencyDetector:
             "confidence": 0.0,
             "detections": [],
         }
+
+    @staticmethod
+    def _select_crop_boxes(traffic_boxes, limit):
+        valid_boxes = [
+            item for item in traffic_boxes
+            if isinstance(item.get("box"), (list, tuple)) and len(item["box"]) == 4
+        ]
+        return sorted(
+            valid_boxes,
+            key=lambda item: max(0, item["box"][2] - item["box"][0]) *
+                             max(0, item["box"][3] - item["box"][1]),
+            reverse=True,
+        )[:max(0, int(limit))]
 
     def _predict(self, image):
         return self.model.predict(
@@ -196,21 +170,12 @@ class EmergencyDetector:
                 )
             )
             try:
-                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "1")))
+                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "4")))
             except ValueError:
                 crop_limit = 1
             largest_boxes = []
             if not full_frame_has_emergency and crop_limit:
-                largest_boxes = sorted(
-                    (
-                        item for item in traffic_boxes
-                        if isinstance(item.get("box"), (list, tuple))
-                        and len(item["box"]) == 4
-                    ),
-                    key=lambda item: max(0, item["box"][2] - item["box"][0]) *
-                                     max(0, item["box"][3] - item["box"][1]),
-                    reverse=True,
-                )[:crop_limit]
+                largest_boxes = self._select_crop_boxes(traffic_boxes, crop_limit)
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
 
@@ -256,9 +221,6 @@ class EmergencyDetector:
                     cx = (bx1 + bx2) / 2
                     cy = (by1 + by2) / 2
                     direction = self._direction(cx, cy, width, height)
-
-                    if not self._matches_vehicle_box(candidate_box, traffic_boxes):
-                        continue
 
                     if os.environ.get("EMERGENCY_DEBUG", "").strip().lower() in {"1", "true", "yes"}:
                         print(
