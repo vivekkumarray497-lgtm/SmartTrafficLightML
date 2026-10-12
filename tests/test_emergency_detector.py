@@ -2,7 +2,6 @@ import unittest
 
 from src.emergency_detector import EmergencyDetector
 
-
 class EmergencyDetectorUnitTests(unittest.TestCase):
     def test_only_ambulance_and_fire_vehicle_labels_are_emergency(self):
         self.assertEqual(EmergencyDetector._label("emergency ambulance"), "ambulance")
@@ -59,7 +58,6 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         self.assertEqual(EmergencyDetector._direction(150, 50, 200, 100), "East")
         self.assertEqual(EmergencyDetector._direction(100, 10, 200, 100), "North")
         self.assertEqual(EmergencyDetector._direction(100, 90, 200, 100), "South")
-
 
 if __name__ == "__main__":
     unittest.main()
