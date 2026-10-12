@@ -4,7 +4,6 @@ import math
 import numpy as np
 from collections import defaultdict, deque
 
-
 class VisionEngine:
     VEHICLES = {2: "cars", 3: "bikes", 5: "buses", 7: "trucks"}
 
@@ -75,7 +74,7 @@ class VisionEngine:
                     dist = math.hypot(cx - previous[1], cy - previous[2])
                     if dt > 0.01:
                         pixel_speed = dist / dt
-                        # This is a relative image-motion estimate, not calibrated km/h.
+
                         if cid in self.VEHICLES:
                             speeds.append(min(pixel_speed * 0.08, 120))
                         if cid in self.VEHICLES and pixel_speed < 5.0:
@@ -112,16 +111,13 @@ class VisionEngine:
 
             emergency_detections = emergency_info["detections"]
 
-        # Draw ordinary detections after emergency classification. If both
-        # models identify the same vehicle, keep the emergency label only.
         for annotation in normal_annotations:
             x1, y1, x2, y2 = annotation["box"]
             overlaps_emergency = False
             if annotation["is_vehicle"]:
                 area_a = max(0, x2 - x1) * max(0, y2 - y1)
                 for item in emergency_detections:
-                    # Only a confirmed candidate should hide the ordinary label.
-                    # Keep normal vehicle labels visible while emergency status is tentative.
+
                     if not item.get("confirmed", False):
                         continue
                     ex1, ey1, ex2, ey2 = item["box"]
@@ -130,9 +126,7 @@ class VisionEngine:
                     intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
                     area_b = max(0, ex2 - ex1) * max(0, ey2 - ey1)
                     smaller_area = min(area_a, area_b)
-                    # Emergency crop boxes can be tighter than YOLO vehicle
-                    # boxes, so IoU alone may fail even when they are the same
-                    # vehicle. Use overlap relative to the smaller box.
+
                     if smaller_area > 0 and intersection / smaller_area >= 0.50:
                         overlaps_emergency = True
                         break
@@ -169,8 +163,7 @@ class VisionEngine:
 
         total = sum(counts.values())
         avg_speed = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
-        # Approximate queue proxy: vehicles in the lower 40% of the frame.
-        # Accurate queue lengths require a calibrated stop-line/ROI per camera.
+
         queue_length = sum(
             1 for item in traffic_boxes
             if (item["box"][1] + item["box"][3]) / 2 >= h * 0.60
