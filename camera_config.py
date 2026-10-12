@@ -13,20 +13,7 @@ CAMERAS = [
         "source": 0,
         "direction": "North",
     },
-    # Example IP camera (uncomment and replace with your real stream URL):
-    # {
-    #     "id": "north_ip_camera",
-    #     "name": "North Road IP Camera",
-    #     "source": "rtsp://USERNAME:PASSWORD@CAMERA_IP:554/stream1",
-    #     "direction": "North",
-    # },
-    # Example video file for testing:
-    # {
-    #     "id": "test_video",
-    #     "name": "Test Video",
-    #     "source": "data/traffic_test.mp4",
-    #     "direction": "East",
-    # },
+
 ]
 
 ACTIVE_CAMERA_ID = "local_webcam"
