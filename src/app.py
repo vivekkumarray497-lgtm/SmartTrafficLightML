@@ -296,14 +296,22 @@ def api_health():
     with camera_lock:
         server_camera = camera is not None and camera.isOpened()
     base_models_ready = model is not None and yolo_model is not None
+    emergency_model_loaded = emergency_detector.model is not None and emergency_detector.available
+    emergency_model_status = (
+        "error" if emergency_detector.error
+        else ("ready" if emergency_model_loaded else "not_loaded")
+    )
     return jsonify({
-        "status": "ok" if base_models_ready and not emergency_detector.error else "degraded",
+        "status": "ok" if base_models_ready and emergency_model_loaded and not emergency_detector.error else "degraded",
         "server_camera": server_camera,
         "browser_camera": True,
         "model": model is not None,
         "vehicle_detector": yolo_model is not None,
         "emergency_detector": emergency_detector.available,
-        "emergency_detector_loaded": emergency_detector.model is not None,
+        "emergency_detector_loaded": emergency_model_loaded,
+        "emergency_detector_status": emergency_model_status,
+        "emergency_model_type": emergency_detector.model_type,
+        "emergency_model_path": os.path.basename(emergency_detector.model_path),
         "emergency_detector_error": emergency_detector.error,
         "active_camera_id": active_camera_id,
         "camera_direction": active_camera_direction
