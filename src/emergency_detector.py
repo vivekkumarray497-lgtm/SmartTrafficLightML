@@ -221,9 +221,13 @@ class EmergencyDetector:
                 if not already_checked:
                     uncovered_traffic_boxes.append(traffic_item)
 
+            # Crop inference is a fallback when the full-frame pass found no
+            # emergency candidate. Running several high-resolution crops after a
+            # successful full-frame detection adds latency without changing the
+            # selected priority vehicle (the controller uses one best candidate).
             largest_boxes = (
                 self._select_crop_boxes(uncovered_traffic_boxes, crop_limit)
-                if crop_limit else []
+                if crop_limit and not full_frame_emergency_boxes else []
             )
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
