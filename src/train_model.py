@@ -3,6 +3,8 @@
 Run from the repository root:
     python src/train_model.py
 
+GitHub Actions also runs this comparison when the script or dataset changes.
+
 The saved model is replaced only when the selected candidate beats the current
 model on the same holdout split. A high score cannot be guaranteed if the target
 labels do not contain a learnable relationship with the input features.
