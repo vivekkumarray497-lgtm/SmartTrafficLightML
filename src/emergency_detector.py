@@ -195,7 +195,7 @@ class EmergencyDetector:
 
             try:
                 # Keep the per-frame fallback bounded for CPU/cloud responsiveness.
-                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "2")))
+                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "4")))
             except ValueError:
                 crop_limit = 4
 
