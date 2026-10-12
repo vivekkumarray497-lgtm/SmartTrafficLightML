@@ -117,9 +117,6 @@ class VisionEngine:
             if annotation["is_vehicle"]:
                 area_a = max(0, x2 - x1) * max(0, y2 - y1)
                 for item in emergency_detections:
-
-                    if not item.get("confirmed", False):
-                        continue
                     ex1, ey1, ex2, ey2 = item["box"]
                     ix1, iy1 = max(x1, ex1), max(y1, ey1)
                     ix2, iy2 = min(x2, ex2), min(y2, ey2)
