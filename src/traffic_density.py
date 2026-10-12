@@ -41,7 +41,6 @@ def calculate_traffic_density(
         "level": level
     }
 
-
 def get_signal_from_density(density):
     if density == "NO TRAFFIC":
         return "GREEN"
@@ -59,7 +58,6 @@ def get_signal_from_density(density):
         return "RED"
 
     return "RED"
-
 
 if __name__ == "__main__":
 
