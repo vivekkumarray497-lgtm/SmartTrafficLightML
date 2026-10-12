@@ -19,11 +19,8 @@
 <video id="cameraVideo" class="camera" autoplay playsinline muted controls></video>
 <canvas id="captureCanvas" style="display:none"></canvas>
 <img id="annotated" class="camera" alt="AI processed traffic" style="margin-top:10px">
-<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onclick="startCamera()">Start Camera</button><button type="button" onclick="stopCamera()">Stop Input</button></div>
-<label for="videoUpload">Upload traffic video to use as camera</label>
-<input id="videoUpload" type="file" accept="video/*" onchange="startUploadedVideo(this)">
-<p class="muted">Select a video file. It will play in the camera window and its frames will be sent to the same AI detection API.</p>
-<p id="cameraStatus" class="muted">Choose Start Camera for a webcam or upload a video file.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onclick="startCamera()">Start Camera</button><button type="button" onclick="stopCamera()">Stop Camera</button></div>
+<p id="cameraStatus" class="muted">Choose Start Camera to begin live camera monitoring.</p>
 <label for="browserCameraDirection">Direction for browser camera</label>
 <select id="browserCameraDirection">
 <option value="North">North</option><option value="South">South</option><option value="East">East</option><option value="West">West</option>
@@ -55,8 +52,6 @@
 <script>
 let emergency = false;
 let cameraStream = null;
-let videoFileActive = false;
-let uploadedVideoUrl = null;
 let captureTimer = null;
 let processing = false;
 
@@ -79,7 +74,7 @@ function render(s) {
   document.getElementById('manualModeBtn').className = s.mode === 'Manual' ? 'selected' : 'secondary';
   document.getElementById('applyManualBtn').disabled = s.mode !== 'Manual';
   document.getElementById('modeStatus').textContent = s.mode === 'Manual' ? 'Manual demo mode: selected direction is shown GREEN.' : 'Auto mode: adaptive controller selects the priority direction.';
-  document.getElementById('systemStatus').textContent = '● ' + ((cameraStream || videoFileActive) ? (videoFileActive ? 'UPLOADED VIDEO ACTIVE' : 'BROWSER CAMERA ACTIVE') : 'DASHBOARD READY');
+  document.getElementById('systemStatus').textContent = '● ' + (cameraStream ? 'BROWSER CAMERA ACTIVE' : 'DASHBOARD READY');
 
   const em = document.getElementById('emergency');
   em.textContent = s.emergency ? ('🚨 ' + (s.emergency_type === 'fire_truck' ? 'FIRE TRUCK' : 'AMBULANCE') + ' DETECTED — AUTOMATIC PRIORITY ACTIVE') : '🟢 Monitoring for Ambulance / Fire Truck';
@@ -176,7 +171,6 @@ refreshServerCameras();
 async function startCamera() {
   try {
     if (cameraStream) return;
-    if (videoFileActive) await stopCamera();
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('Browser camera API is unavailable. Use HTTPS or localhost.');
@@ -191,53 +185,12 @@ async function startCamera() {
     video.srcObject = cameraStream;
     await video.play();
 
-    videoFileActive = false;
     document.getElementById('cameraStatus').textContent = 'Camera connected. AI processing is running.';
     captureTimer = setInterval(sendFrame, 800);
     await sendFrame();
   } catch (e) {
     document.getElementById('cameraStatus').textContent = 'Camera permission/error: ' + e.message;
   }
-}
-
-async function startUploadedVideo(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  if (!file.type.startsWith('video/')) {
-    document.getElementById('cameraStatus').textContent = 'Please select a valid video file.';
-    input.value = '';
-    return;
-  }
-  if (captureTimer) {
-    clearInterval(captureTimer);
-    captureTimer = null;
-  }
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
-  if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
-  const video = document.getElementById('cameraVideo');
-  video.pause();
-  video.srcObject = null;
-  uploadedVideoUrl = URL.createObjectURL(file);
-  video.src = uploadedVideoUrl;
-  videoFileActive = true;
-  try {
-    await video.play();
-    document.getElementById('cameraStatus').textContent = 'Uploaded video playing. AI frame detection is running.';
-    captureTimer = setInterval(sendFrame, 800);
-    await sendFrame();
-  } catch (error) {
-    videoFileActive = false;
-    document.getElementById('cameraStatus').textContent = 'Could not play video: ' + error.message;
-  }
-  video.onended = () => {
-    if (captureTimer) clearInterval(captureTimer);
-    captureTimer = null;
-    videoFileActive = false;
-    document.getElementById('cameraStatus').textContent = 'Video ended. Detection stopped; upload another video or replay this one.';
-  };
 }
 
 async function stopCamera() {
@@ -251,16 +204,11 @@ async function stopCamera() {
     cameraStream = null;
   }
 
-  videoFileActive = false;
   const video = document.getElementById('cameraVideo');
   video.pause();
   video.srcObject = null;
   video.removeAttribute('src');
   video.load();
-  if (uploadedVideoUrl) {
-    URL.revokeObjectURL(uploadedVideoUrl);
-    uploadedVideoUrl = null;
-  }
 
   try {
     await fetch('/api/camera/reset', {method:'POST'});
@@ -271,7 +219,7 @@ async function stopCamera() {
 }
 
 async function sendFrame() {
-  if (processing || (!cameraStream && !videoFileActive)) return;
+  if (processing || !cameraStream) return;
 
   const video = document.getElementById('cameraVideo');
   const canvas = document.getElementById('captureCanvas');
@@ -365,7 +313,6 @@ window.addEventListener('resize', loadTrafficHistory);
 
 window.addEventListener('beforeunload', () => {
   if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
-  if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
 });
 
 async function clearEmergency() {
