@@ -20,13 +20,7 @@ class EmergencyDetector:
     # Keep the open-vocabulary classifier focused on the two actual priority
     # classes. A long list of near-duplicate ambulance phrases competes for the
     # same detections and can lower the score for the correct class.
-    PROMPT_CLASSES = [
-        "ambulance",
-        "ambulance vehicle",
-        "emergency ambulance",
-        "fire truck",
-        "fire engine",
-    ]
+    PROMPT_CLASSES = ["ambulance", "fire truck"]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
         self.model_path = model_path or os.environ.get(
