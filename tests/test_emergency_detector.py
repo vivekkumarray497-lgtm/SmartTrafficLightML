@@ -12,16 +12,14 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
     def test_emergency_prompts_include_common_visual_variants(self):
         prompts = EmergencyDetector.PROMPT_CLASSES
         self.assertIn("ambulance", prompts)
-        self.assertIn("emergency ambulance medical vehicle", prompts)
-        self.assertIn("ambulance with emergency medical markings", prompts)
         self.assertIn("fire truck", prompts)
-        self.assertIn("fire engine emergency firefighting vehicle", prompts)
-        self.assertIn("fire department rescue truck", prompts)
-        # Keep ordinary alternatives so every truck/bus is not automatically
-        # treated as an emergency vehicle.
-        self.assertIn("city bus passenger bus", prompts)
+        # Keep the prompt vocabulary compact and retain non-emergency
+        # alternatives to reduce confusion between ambulances, buses and trucks.
+        self.assertLessEqual(len(prompts), 8)
+        self.assertIn("city bus", prompts)
         self.assertIn("commercial goods truck", prompts)
-        self.assertIn("police car law enforcement vehicle", prompts)
+        self.assertIn("passenger van", prompts)
+        self.assertIn("police car", prompts)
 
     def test_default_emergency_confidence_is_not_forced_to_very_low_value(self):
         detector = EmergencyDetector()
