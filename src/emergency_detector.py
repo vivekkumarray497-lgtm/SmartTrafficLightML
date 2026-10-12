@@ -3,7 +3,6 @@ import threading
 import time
 from ultralytics import YOLOWorld
 
-
 class EmergencyDetector:
     """
     Emergency vehicle detector using YOLO-World.
@@ -19,9 +18,7 @@ class EmergencyDetector:
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
-        # Emergency objects can score below generic vehicle detections. Use a
-        # lower recall-oriented threshold; vehicle-box overlap plus consecutive
-        # frame confirmation guard against isolated false positives.
+
         self.confidence = float(os.environ.get("EMERGENCY_CONF", min(confidence, 0.08)))
         self.consecutive_required = max(
             1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
@@ -50,11 +47,7 @@ class EmergencyDetector:
                 return
             try:
                 self.model = YOLOWorld(self.model_path)
-                # Include a small set of ordinary-vehicle contrast classes.
-                # This lets YOLO-World compare an ambulance/fire engine against
-                # likely lookalikes instead of forcing every vehicle into an
-                # emergency-only prompt. Avoid a long synonym list: it adds
-                # inference overhead without adding useful class separation.
+
                 self.model.set_classes([
                     "ambulance",
                     "ambulance with red cross markings",
@@ -71,8 +64,7 @@ class EmergencyDetector:
                 self.model = None
                 self.error = str(exc)[:220]
                 self.available = False
-                # Avoid retrying a failed model download on every camera frame.
-                # A cooldown still allows recovery after a transient cloud/network error.
+
                 self._next_load_attempt = time.monotonic() + 30.0
 
     @staticmethod
@@ -129,8 +121,7 @@ class EmergencyDetector:
                 continue
             if cls._iou(candidate_box, vehicle_box) >= threshold:
                 return True
-            # Emergency boxes from crop inference may be tighter than the base
-            # vehicle box, so also compare overlap against the smaller box area.
+
             x1, y1, x2, y2 = candidate_box
             vx1, vy1, vx2, vy2 = vehicle_box
             intersection = max(0, min(x2, vx2) - max(x1, vx1)) * max(
@@ -179,8 +170,7 @@ class EmergencyDetector:
             image,
             conf=self.confidence,
             iou=0.45,
-            # Keep enough detail for vehicle recognition without the
-            # substantial latency of 1024px inference on Colab CPU.
+
             imgsz=800,
             verbose=False,
         )[0]
@@ -198,11 +188,7 @@ class EmergencyDetector:
             result = self._predict(frame)
             self.error = ""
             results_to_parse = [(result, 0, 0)]
-            # Crop inference is the expensive part of this path. First trust
-            # a full-frame emergency candidate; only inspect a vehicle crop if
-            # the full-frame pass found no emergency class. Limit fallback to
-            # the largest vehicle crop (configurable) to avoid 3 extra serial
-            # model passes on every frame in CPU/cloud deployments.
+
             full_frame_has_emergency = (
                 result.boxes is not None
                 and any(
@@ -228,8 +214,7 @@ class EmergencyDetector:
                 )[:crop_limit]
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
-                # Give the classifier more context (lights, markings and body
-                # shape) while enlarging the vehicle crop for fine details.
+
                 pad_x = max(12, int((x2 - x1) * 0.35))
                 pad_y = max(12, int((y2 - y1) * 0.35))
                 cx1 = max(0, x1 - pad_x)
@@ -340,8 +325,7 @@ class EmergencyDetector:
             }
 
         except Exception as exc:
-            # Keep a successfully loaded model available after a transient
-            # bad frame/inference error; the next frame should be retried.
+
             self.error = str(exc)[:220]
             self.available = self.model is not None
             self._streak = 0
