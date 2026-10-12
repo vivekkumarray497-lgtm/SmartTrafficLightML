@@ -22,9 +22,14 @@ class EmergencyDetector:
         "emergency ambulance vehicle",
         "medical ambulance",
         "ambulance van",
+        "white ambulance vehicle",
+        "ambulance with emergency lights",
+        "ambulance with red cross markings",
         "fire truck",
         "fire engine",
         "fire rescue truck",
+        "fire department fire truck",
+        "fire engine emergency vehicle",
     ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
@@ -145,13 +150,14 @@ class EmergencyDetector:
             reverse=True,
         )[:max(0, int(limit))]
 
-    def _predict(self, image):
+    def _predict(self, image, confidence=None, imgsz=800):
+        # Crop inference can use a lower threshold because the vehicle occupies
+        # more of the pixels. Full-frame inference keeps the configured threshold.
         return self.model.predict(
             image,
-            conf=self.confidence,
+            conf=self.confidence if confidence is None else confidence,
             iou=0.45,
-
-            imgsz=800,
+            imgsz=imgsz,
             verbose=False,
         )[0]
 
@@ -181,29 +187,16 @@ class EmergencyDetector:
                         )
 
             try:
-                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "6")))
+                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "4")))
             except ValueError:
-                crop_limit = 6
+                crop_limit = 4
 
-            # Crop only vehicles not already covered by a full-frame emergency box.
-            # This preserves a useful fallback for a second ambulance/fire truck
-            # without needlessly running the crop model on the same vehicle again.
+            # The full-frame pass is the fast path. Only run crop fallback when
+            # it found no emergency vehicle; previously every frame could trigger
+            # six extra serial model calls, causing severe lag and stale video.
             uncovered_traffic_boxes = []
-            for item in traffic_boxes:
-                x1, y1, x2, y2 = item["box"]
-                area_a = max(0, x2 - x1) * max(0, y2 - y1)
-                covered = False
-                for ex1, ey1, ex2, ey2 in full_frame_emergency_boxes:
-                    ix1, iy1 = max(x1, ex1), max(y1, ey1)
-                    ix2, iy2 = min(x2, ex2), min(y2, ey2)
-                    intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-                    area_b = max(0, ex2 - ex1) * max(0, ey2 - ey1)
-                    smaller_area = min(area_a, area_b)
-                    if smaller_area > 0 and intersection / smaller_area >= 0.50:
-                        covered = True
-                        break
-                if not covered:
-                    uncovered_traffic_boxes.append(item)
+            if not full_frame_emergency_boxes:
+                uncovered_traffic_boxes = list(traffic_boxes)
 
             largest_boxes = (
                 self._select_crop_boxes(uncovered_traffic_boxes, crop_limit)
@@ -220,7 +213,11 @@ class EmergencyDetector:
                 cy2 = min(height, y2 + pad_y)
                 if cx2 - cx1 >= 40 and cy2 - cy1 >= 40:
                     crop = frame[cy1:cy2, cx1:cx2]
-                    crop_result = self._predict(crop)
+                    crop_result = self._predict(
+                        crop,
+                        confidence=min(self.confidence, 0.10),
+                        imgsz=960,
+                    )
                     results_to_parse.append((crop_result, cx1, cy1))
 
             for result, ox, oy in results_to_parse:
