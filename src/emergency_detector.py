@@ -178,9 +178,9 @@ class EmergencyDetector:
                         )
 
             try:
-                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "3")))
+                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "6")))
             except ValueError:
-                crop_limit = 3
+                crop_limit = 6
 
             # Crop only vehicles not already covered by a full-frame emergency box.
             # This preserves a useful fallback for a second ambulance/fire truck
