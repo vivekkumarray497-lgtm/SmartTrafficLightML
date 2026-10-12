@@ -25,6 +25,24 @@ A Flask-based smart traffic management application that combines computer vision
 - Manual emergency test/reset controls
 - Mobile-friendly dashboard
 
+## Emergency detector configuration
+
+The default `yolov8s-worldv2.pt` model is a zero-shot open-vocabulary fallback; it is **not a dedicated ambulance-trained model**, so it may confuse ambulances with buses or trucks. For dependable emergency recognition, provide weights trained with the target classes.
+
+- `EMERGENCY_MODEL_PATH`: path to the emergency model weights.
+- `EMERGENCY_MODEL_TYPE=world`: use YOLO-World (default).
+- `EMERGENCY_MODEL_TYPE=custom`: load the supplied trained weights with Ultralytics YOLO. The model's class names must include `ambulance` and/or `fire truck`.
+- `EMERGENCY_DEBUG=1`: log the loaded model/classes, raw detections, confidence values, and inference errors.
+
+Example for a trained weights file:
+```bash
+EMERGENCY_MODEL_PATH=models/emergency_best.pt
+EMERGENCY_MODEL_TYPE=custom
+EMERGENCY_DEBUG=1
+```
+
+Setting custom mode without a valid trained weights file will not improve detection; the file must actually exist and be trained for these emergency classes.
+
 ## How the System Works
 
 For cloud deployment, the browser captures the camera frame and sends it to Flask for processing.
