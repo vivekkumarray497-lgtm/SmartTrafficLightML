@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Smart Traffic Control Center</title>
 <style>
 :root{color-scheme:dark;--bg:#080d18;--line:#263650;--text:#e7eefb;--muted:#91a2bd;--blue:#60a5fa}
@@ -16,11 +16,11 @@
 <div class="grid">
 <div>
 <div class="card"><h2>📷 Live Traffic Camera</h2>
-<video id="cameraVideo" class="camera" autoplay playsinline muted controls></video>
+<video id="cameraVideo" class="camera" autoplay playsinline muted></video>
 <canvas id="captureCanvas" style="display:none"></canvas>
 <img id="annotated" class="camera" alt="AI processed traffic" style="margin-top:10px">
-<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" onclick="startCamera()">Start Camera</button><button type="button" onclick="stopCamera()">Stop Camera</button></div>
-<p id="cameraStatus" class="muted">Choose Start Camera to begin live camera monitoring.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button onclick="startCamera()">Start Camera</button><button onclick="stopCamera()">Stop Camera</button></div>
+<p id="cameraStatus" class="muted">Browser camera mode works on cloud deployments over HTTPS. Select the road direction this camera watches before starting.</p>
 <label for="browserCameraDirection">Direction for browser camera</label>
 <select id="browserCameraDirection">
 <option value="North">North</option><option value="South">South</option><option value="East">East</option><option value="West">West</option>
@@ -204,18 +204,14 @@ async function stopCamera() {
     cameraStream = null;
   }
 
-  const video = document.getElementById('cameraVideo');
-  video.pause();
-  video.srcObject = null;
-  video.removeAttribute('src');
-  video.load();
+  document.getElementById('cameraVideo').srcObject = null;
 
   try {
     await fetch('/api/camera/reset', {method:'POST'});
     await refresh();
   } catch (e) {}
 
-  document.getElementById('cameraStatus').textContent = 'Input stopped.';
+  document.getElementById('cameraStatus').textContent = 'Camera stopped.';
 }
 
 async function sendFrame() {
