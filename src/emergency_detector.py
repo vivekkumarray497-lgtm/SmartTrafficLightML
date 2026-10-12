@@ -197,17 +197,34 @@ class EmergencyDetector:
             result = self._predict(frame)
             self.error = ""
             results_to_parse = [(result, 0, 0)]
-            # Also inspect vehicle crops even when the full-frame pass finds
-            # an emergency candidate. The full-frame model can miss a small or
-            # distant ambulance while detecting a different emergency vehicle.
-            # Limit crop inference to the three largest traffic boxes to keep
-            # the per-frame workload bounded.
-            largest_boxes = sorted(
-                traffic_boxes,
-                key=lambda item: max(0, item["box"][2] - item["box"][0]) *
-                                 max(0, item["box"][3] - item["box"][1]),
-                reverse=True,
-            )[:3]
+            # Crop inference is the expensive part of this path. First trust
+            # a full-frame emergency candidate; only inspect a vehicle crop if
+            # the full-frame pass found no emergency class. Limit fallback to
+            # the largest vehicle crop (configurable) to avoid 3 extra serial
+            # model passes on every frame in CPU/cloud deployments.
+            full_frame_has_emergency = (
+                result.boxes is not None
+                and any(
+                    self._label(str(result.names[int(box.cls[0])])) in self.EMERGENCY_LABELS
+                    for box in result.boxes
+                )
+            )
+            try:
+                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "1")))
+            except ValueError:
+                crop_limit = 1
+            largest_boxes = []
+            if not full_frame_has_emergency and crop_limit:
+                largest_boxes = sorted(
+                    (
+                        item for item in traffic_boxes
+                        if isinstance(item.get("box"), (list, tuple))
+                        and len(item["box"]) == 4
+                    ),
+                    key=lambda item: max(0, item["box"][2] - item["box"][0]) *
+                                     max(0, item["box"][3] - item["box"][1]),
+                    reverse=True,
+                )[:crop_limit]
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
                 # Give the classifier more context (lights, markings and body
