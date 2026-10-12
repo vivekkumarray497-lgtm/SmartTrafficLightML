@@ -15,9 +15,16 @@ class EmergencyDetector:
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
     # Keep emergency prompts limited to the two permitted priority vehicles.
     # Buses, trucks, vans, cars, and police are not emergency prompt classes.
+    # These are wording variants of the two allowed emergency categories only.
+    # YOLO-World can score a vehicle differently depending on the phrase used.
     PROMPT_CLASSES = [
         "ambulance",
+        "emergency ambulance vehicle",
+        "medical ambulance",
+        "ambulance van",
         "fire truck",
+        "fire engine",
+        "fire rescue truck",
     ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
@@ -159,20 +166,46 @@ class EmergencyDetector:
             self.error = ""
             results_to_parse = [(result, 0, 0)]
 
-            full_frame_has_emergency = (
-                result.boxes is not None
-                and any(
-                    self._label(str(result.names[int(box.cls[0])])) in self.EMERGENCY_LABELS
-                    for box in result.boxes
-                )
-            )
+            # Keep track of emergency boxes already found in the full frame.
+            # Do not let one candidate suppress checks of other vehicles in the scene.
+            full_frame_emergency_boxes = []
+            if result.boxes is not None:
+                for box in result.boxes:
+                    raw_name = str(result.names[int(box.cls[0])])
+                    if self._label(raw_name) in self.EMERGENCY_LABELS:
+                        full_frame_emergency_boxes.append(
+                            list(map(int, box.xyxy[0]))
+                        )
+
             try:
-                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "4")))
+                crop_limit = max(0, int(os.environ.get("EMERGENCY_CROP_LIMIT", "3")))
             except ValueError:
-                crop_limit = 1
-            largest_boxes = []
-            if not full_frame_has_emergency and crop_limit:
-                largest_boxes = self._select_crop_boxes(traffic_boxes, crop_limit)
+                crop_limit = 3
+
+            # Crop only vehicles not already covered by a full-frame emergency box.
+            # This preserves a useful fallback for a second ambulance/fire truck
+            # without needlessly running the crop model on the same vehicle again.
+            uncovered_traffic_boxes = []
+            for item in traffic_boxes:
+                x1, y1, x2, y2 = item["box"]
+                area_a = max(0, x2 - x1) * max(0, y2 - y1)
+                covered = False
+                for ex1, ey1, ex2, ey2 in full_frame_emergency_boxes:
+                    ix1, iy1 = max(x1, ex1), max(y1, ey1)
+                    ix2, iy2 = min(x2, ex2), min(y2, ey2)
+                    intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                    area_b = max(0, ex2 - ex1) * max(0, ey2 - ey1)
+                    smaller_area = min(area_a, area_b)
+                    if smaller_area > 0 and intersection / smaller_area >= 0.50:
+                        covered = True
+                        break
+                if not covered:
+                    uncovered_traffic_boxes.append(item)
+
+            largest_boxes = (
+                self._select_crop_boxes(uncovered_traffic_boxes, crop_limit)
+                if crop_limit else []
+            )
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
 
