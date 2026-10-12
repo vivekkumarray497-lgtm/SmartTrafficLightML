@@ -32,6 +32,7 @@ class VisionEngine:
         stopped_waits = []
         traffic_boxes = []
         normal_annotations = []
+        detection_confidences = []
 
         result = self.model.track(
             frame, persist=True, conf=0.30, iou=0.45,
@@ -48,10 +49,12 @@ class VisionEngine:
                 cy = (y1 + y2) // 2
 
                 if cid == 0:
+                    detection_confidences.append(conf)
                     pedestrians += 1
                     name = "Person"
                     label_color = (255, 180, 0)
                 elif cid in self.VEHICLES:
+                    detection_confidences.append(conf)
                     key = self.VEHICLES[cid]
                     counts[key] += 1
                     directions[self._direction(cx, cy, w, h)] += 1
@@ -186,5 +189,7 @@ class VisionEngine:
             "emergency_type": emergency_type,
             "emergency_direction": emergency_direction,
             "emergency_confidence": emergency_confidence,
+            "live_confidence": round(float(np.mean(detection_confidences + ([emergency_confidence] if emergency else []))) * 100, 1) if detection_confidences or emergency else None,
+            "live_confidence_samples": len(detection_confidences) + (1 if emergency else 0),
         }
         return metrics, frame
