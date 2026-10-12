@@ -9,17 +9,15 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertNotIn(label, EmergencyDetector.EMERGENCY_LABELS)
 
-    def test_emergency_prompts_include_common_visual_variants(self):
-        prompts = EmergencyDetector.PROMPT_CLASSES
-        self.assertIn("ambulance", prompts)
-        self.assertIn("fire truck", prompts)
-        # Keep the prompt vocabulary compact and retain non-emergency
-        # alternatives to reduce confusion between ambulances, buses and trucks.
-        self.assertLessEqual(len(prompts), 8)
-        self.assertIn("city bus", prompts)
-        self.assertIn("commercial goods truck", prompts)
-        self.assertIn("passenger van", prompts)
-        self.assertIn("police car", prompts)
+    def test_emergency_prompts_contain_only_ambulance_and_fire_truck(self):
+        self.assertEqual(
+            EmergencyDetector.PROMPT_CLASSES,
+            ["ambulance", "fire truck"],
+        )
+        for label in ("bus", "city bus", "truck", "commercial goods truck",
+                      "van", "passenger van", "car", "police car"):
+            with self.subTest(label=label):
+                self.assertNotIn(label, EmergencyDetector.PROMPT_CLASSES)
 
     def test_default_emergency_confidence_is_not_forced_to_very_low_value(self):
         detector = EmergencyDetector()
