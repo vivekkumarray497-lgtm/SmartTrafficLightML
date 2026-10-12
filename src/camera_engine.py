@@ -1,7 +1,6 @@
 import cv2
 from ultralytics import YOLO
 
-
 class CameraEngine:
 
     def __init__(self):
@@ -121,7 +120,6 @@ class CameraEngine:
         cv2.destroyAllWindows()
 
         print("Camera stopped.")
-
 
 if __name__ == "__main__":
 
