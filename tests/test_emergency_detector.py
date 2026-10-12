@@ -9,11 +9,13 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertNotIn(label, EmergencyDetector.EMERGENCY_LABELS)
 
-    def test_emergency_prompts_contain_only_ambulance_and_fire_truck(self):
-        self.assertEqual(
-            EmergencyDetector.PROMPT_CLASSES,
-            ["ambulance", "fire truck"],
-        )
+    def test_emergency_prompts_are_variants_of_only_allowed_categories(self):
+        self.assertIn("ambulance", EmergencyDetector.PROMPT_CLASSES)
+        self.assertIn("fire truck", EmergencyDetector.PROMPT_CLASSES)
+        for prompt in EmergencyDetector.PROMPT_CLASSES:
+            with self.subTest(prompt=prompt):
+                mapped = EmergencyDetector._label(prompt)
+                self.assertIn(mapped, EmergencyDetector.EMERGENCY_LABELS)
         for label in ("bus", "city bus", "truck", "commercial goods truck",
                       "van", "passenger van", "car", "police car"):
             with self.subTest(label=label):
