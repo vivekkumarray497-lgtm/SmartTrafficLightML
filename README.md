@@ -114,6 +114,20 @@ Use `0`, `1`, etc. for USB camera indices, a reachable RTSP/HTTP stream URL for 
 | `/video_feed` | Local server webcam stream |
 | `/predict` | Random Forest prediction form |
 
+## Improving and evaluating the tabular model
+
+Run the model comparison from the repository root after installing requirements:
+
+```bash
+python src/train_model.py
+```
+
+The script compares Extra Trees, Random Forest, Gradient Boosting, and HistGradientBoosting using stratified 5-fold cross-validation on the training split. It evaluates the selected candidate on the fixed 20% holdout and replaces `model/random_forest_model.pkl` only if that candidate beats the current model on that holdout. The detailed comparison, class report, and confusion matrix are written to `reports/model_evaluation.json`.
+
+Important: this is the separate tabular `signal_status` prediction task, not live camera accuracy. The included dataset has 2,000 rows, and the average traffic-volume, vehicle-count, and speed values are very similar across Red, Yellow, and Green labels. This suggests the current labels may not encode a strong learnable relationship with the supplied features, so a model-algorithm change alone may not deliver a meaningful accuracy increase. Do not relabel data just to inflate the score; use verified signal-state records or clearly documented ground-truth labels.
+
+For live-camera accuracy, evaluate predictions against manually annotated frames/video (vehicle classes, bounding boxes, and emergency labels). The live confidence percentage shown on the dashboard is detector confidence, not verified end-to-end accuracy. Emergency recognition in particular needs representative ambulance/fire-truck images and video with correct labels to train and validate dedicated weights.
+
 ## Model and Evaluation Notes
 
 The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection evaluates the full frame first, then falls back to a configurable number of vehicle crops (four by default) only when the full-frame pass finds no emergency class. Crop inference uses a lower confidence threshold and higher image resolution to improve detection of small or distant emergency vehicles. This avoids repeated crop inference when a full-frame emergency candidate is already present. A candidate label is not the same as confirmed emergency priority; priority requires consecutive-frame confirmation. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation and overlapping-box deduplication help stabilize emergency decisions, but they do not guarantee perfect classification. Set `EMERGENCY_CROP_LIMIT=0` to disable crop fallback or increase it for more recall at the cost of latency. Crop fallback can still add processing time when the full-frame pass misses an emergency vehicle. If model loading fails temporarily, the detector retries after a short cooldown instead of retrying on every frame.
