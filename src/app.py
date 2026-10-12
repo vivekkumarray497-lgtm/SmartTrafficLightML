@@ -5,6 +5,9 @@ import os
 import sys
 import cv2
 import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 import threading
 import time
 from datetime import datetime
@@ -77,6 +80,48 @@ traffic_data = {
     "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
     "mode": "Auto", "countdown": 15
 }
+
+def evaluate_model_accuracy():
+    """Evaluate the saved Random Forest on the same held-out split used by the project notebook."""
+    dataset_path = os.path.join(BASE_DIR, "dataset", "cleaned_traffic_data.csv")
+    try:
+        df = pd.read_csv(dataset_path)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df["hour"] = df["timestamp"].dt.hour
+        df["minute"] = df["timestamp"].dt.minute
+        df["day"] = df["timestamp"].dt.day
+        df["month"] = df["timestamp"].dt.month
+        df["weather_condition"] = df["weather_condition"].map(weather_mapping)
+        df["signal_status"] = df["signal_status"].map({"Red": 0, "Yellow": 1, "Green": 2})
+        features = [
+            "location_id", "traffic_volume", "avg_vehicle_speed",
+            "vehicle_count_cars", "vehicle_count_trucks", "vehicle_count_bikes",
+            "weather_condition", "temperature", "humidity", "accident_reported",
+            "hour", "minute", "day", "month"
+        ]
+        evaluation = df[features + ["signal_status"]].dropna()
+        X = evaluation[features]
+        y = evaluation["signal_status"].astype(int)
+        _, X_test, _, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+        accuracy = float(accuracy_score(y_test, model.predict(X_test)) * 100)
+        return {
+            "accuracy": round(accuracy, 1),
+            "samples": int(len(y_test)),
+            "status": "available",
+            "method": "Held-out test split (20%)"
+        }
+    except Exception as exc:
+        print(f"Model accuracy evaluation unavailable: {exc}")
+        return {
+            "accuracy": None,
+            "samples": 0,
+            "status": "unavailable",
+            "method": "Evaluation dataset unavailable"
+        }
+
+MODEL_EVALUATION = evaluate_model_accuracy()
 
 def get_camera():
     global camera, camera_source_id
@@ -285,6 +330,10 @@ def current_state():
     with state_lock:
         result = dict(traffic_data)
         result["directions"] = dict(traffic_data["directions"])
+        result["model_accuracy"] = MODEL_EVALUATION["accuracy"]
+        result["model_accuracy_samples"] = MODEL_EVALUATION["samples"]
+        result["model_accuracy_status"] = MODEL_EVALUATION["status"]
+        result["model_accuracy_method"] = MODEL_EVALUATION["method"]
         return result
 
 @app.route("/")
