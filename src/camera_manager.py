@@ -1,7 +1,6 @@
 import cv2
 import os
 
-
 class CameraSource:
 
     def __init__(self, source=0, name="Camera"):
@@ -62,7 +61,6 @@ class CameraSource:
             self.cap.release()
             self.cap = None
 
-
 class MultiCameraManager:
 
     def __init__(self):
@@ -110,7 +108,6 @@ class MultiCameraManager:
             camera.release()
 
         self.cameras.clear()
-
 
 def main():
 
@@ -180,7 +177,6 @@ def main():
 
         print("All cameras stopped.")
         print("Program closed.")
-
 
 if __name__ == "__main__":
     main()
