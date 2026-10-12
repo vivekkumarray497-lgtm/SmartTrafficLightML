@@ -9,19 +9,19 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertNotIn(label, EmergencyDetector.EMERGENCY_LABELS)
 
-    def test_emergency_prompts_use_one_canonical_name_per_category(self):
-        self.assertEqual(
-            EmergencyDetector.PROMPT_CLASSES,
-            [
-                "ambulance emergency medical vehicle with medical markings",
-                "fire truck fire engine emergency firefighting vehicle",
-                "city bus passenger bus",
-                "commercial goods truck",
-                "passenger van",
-                "ordinary passenger car",
-                "police car law enforcement vehicle",
-            ],
-        )
+    def test_emergency_prompts_include_common_visual_variants(self):
+        prompts = EmergencyDetector.PROMPT_CLASSES
+        self.assertIn("ambulance", prompts)
+        self.assertIn("emergency ambulance medical vehicle", prompts)
+        self.assertIn("ambulance with emergency medical markings", prompts)
+        self.assertIn("fire truck", prompts)
+        self.assertIn("fire engine emergency firefighting vehicle", prompts)
+        self.assertIn("fire department rescue truck", prompts)
+        # Keep ordinary alternatives so every truck/bus is not automatically
+        # treated as an emergency vehicle.
+        self.assertIn("city bus passenger bus", prompts)
+        self.assertIn("commercial goods truck", prompts)
+        self.assertIn("police car law enforcement vehicle", prompts)
 
     def test_default_emergency_confidence_is_not_forced_to_very_low_value(self):
         detector = EmergencyDetector()
