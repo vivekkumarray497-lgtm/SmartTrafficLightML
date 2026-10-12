@@ -21,7 +21,6 @@ vehicle_data = {
     "speed": 0
 }
 
-
 def get_traffic_data():
 
     global vehicle_data
@@ -167,7 +166,6 @@ def get_traffic_data():
 
     return frame, vehicle_data
 
-
 def release_camera():
 
     global cap
@@ -176,7 +174,6 @@ def release_camera():
         cap.release()
 
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
 
