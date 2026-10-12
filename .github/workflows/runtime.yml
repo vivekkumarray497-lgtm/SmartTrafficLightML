@@ -49,7 +49,10 @@ jobs:
           health = client.get("/api/health")
           assert health.status_code == 200, health.data.decode()
           health_data = health.get_json()
-          assert health_data["status"] == "ok"
+          # The emergency model is lazy-loaded on the first processed frame.
+          # A fresh process must report degraded/not_loaded rather than falsely healthy.
+          assert health_data["status"] == "degraded", health_data
+          assert health_data["emergency_detector_status"] == "not_loaded", health_data
 
           state = client.get("/api/state")
           assert state.status_code == 200, state.data.decode()
