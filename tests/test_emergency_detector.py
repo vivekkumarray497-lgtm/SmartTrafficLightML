@@ -29,6 +29,8 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
     def test_only_ambulance_and_fire_vehicle_labels_are_emergency(self):
         self.assertEqual(EmergencyDetector._label("emergency ambulance"), "ambulance")
         self.assertEqual(EmergencyDetector._label("fire engine"), "fire truck")
+        self.assertEqual(EmergencyDetector._label("fire_truck"), "fire truck")
+        self.assertEqual(EmergencyDetector._label("fire-truck"), "fire truck")
         self.assertEqual(EmergencyDetector._label("police car"), "car")
         self.assertEqual(EmergencyDetector._label("city bus"), "bus")
 
@@ -39,6 +41,8 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
             ("delivery truck", "truck"),
             ("passenger van", "van"),
             ("fire engine", "fire truck"),
+            ("fire_truck", "fire truck"),
+            ("fire-truck", "fire truck"),
             ("ambulance with red cross markings", "ambulance"),
         ):
             with self.subTest(label=label):
