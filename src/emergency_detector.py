@@ -7,22 +7,17 @@ class EmergencyDetector:
     """
     Emergency vehicle detector using YOLO-World.
 
-    Emergency prompts are evaluated alongside ordinary vehicle prompts so
-    buses, vans, cars, and trucks have non-emergency alternatives. Only
-    ambulance and fire-truck labels can trigger priority.
+    The emergency model is prompted only for ambulance and fire truck.
+    Ordinary vehicle classification remains the responsibility of VisionEngine.
+    Only ambulance and fire-truck labels can trigger priority.
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
-    # Keep the vocabulary compact. Large prompt lists can dilute/confuse
-    # open-vocabulary matching; use one clear label per vehicle category.
-    # Only ambulance and fire truck are allowed to trigger signal priority.
+    # Keep emergency prompts limited to the two permitted priority vehicles.
+    # Buses, trucks, vans, cars, and police are not emergency prompt classes.
     PROMPT_CLASSES = [
         "ambulance",
         "fire truck",
-        "city bus",
-        "commercial goods truck",
-        "passenger van",
-        "police car",
     ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
