@@ -39,7 +39,13 @@ SIGNAL_NAMES = ["Red", "Yellow", "Green"]
 
 def load_data():
     df = pd.read_csv(DATASET_PATH)
-    required = set(FEATURES + ["timestamp", "signal_status", "weather_condition"])
+    raw_required = [
+        "timestamp", "location_id", "traffic_volume", "avg_vehicle_speed",
+        "vehicle_count_cars", "vehicle_count_trucks", "vehicle_count_bikes",
+        "weather_condition", "temperature", "humidity", "accident_reported",
+        "signal_status",
+    ]
+    required = set(raw_required)
     missing = sorted(required.difference(df.columns))
     if missing:
         raise ValueError(f"Dataset is missing required columns: {missing}")
