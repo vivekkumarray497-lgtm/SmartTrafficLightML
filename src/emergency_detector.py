@@ -137,8 +137,11 @@ class EmergencyDetector:
         ]
         return sorted(
             valid_boxes,
-            key=lambda item: max(0, item["box"][2] - item["box"][0]) *
-                             max(0, item["box"][3] - item["box"][1]),
+            key=lambda item: (
+                1 if item.get("class_id") in (5, 7) else 0,
+                max(0, item["box"][2] - item["box"][0]) *
+                max(0, item["box"][3] - item["box"][1]),
+            ),
             reverse=True,
         )[:max(0, int(limit))]
 
