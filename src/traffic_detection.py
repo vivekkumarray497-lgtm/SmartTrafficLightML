@@ -1,6 +1,5 @@
 import cv2
 
-
 def start_camera():
 
     camera = cv2.VideoCapture(0)
@@ -37,7 +36,6 @@ def start_camera():
 
     camera.release()
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     start_camera()
