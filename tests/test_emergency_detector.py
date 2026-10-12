@@ -10,6 +10,7 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
                 self.assertNotIn(label, EmergencyDetector.EMERGENCY_LABELS)
 
     def test_emergency_prompts_are_variants_of_only_allowed_categories(self):
+        self.assertEqual(EmergencyDetector.PROMPT_CLASSES, ["ambulance", "fire truck"])
         self.assertIn("ambulance", EmergencyDetector.PROMPT_CLASSES)
         self.assertIn("fire truck", EmergencyDetector.PROMPT_CLASSES)
         for prompt in EmergencyDetector.PROMPT_CLASSES:
