@@ -77,6 +77,15 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         ]
         self.assertEqual(areas, sorted(areas, reverse=True))
 
+    def test_bus_and_truck_candidates_get_emergency_recheck_priority(self):
+        boxes = [
+            {"class_id": 2, "box": [0, 0, 200, 200]},
+            {"class_id": 5, "box": [0, 0, 40, 40]},
+            {"class_id": 7, "box": [0, 0, 30, 30]},
+        ]
+        selected = EmergencyDetector._select_crop_boxes(boxes, 2)
+        self.assertEqual([item["class_id"] for item in selected], [5, 7])
+
     def test_direction_uses_frame_quadrants(self):
         self.assertEqual(EmergencyDetector._direction(90, 50, 200, 100), "West")
         self.assertEqual(EmergencyDetector._direction(150, 50, 200, 100), "East")
