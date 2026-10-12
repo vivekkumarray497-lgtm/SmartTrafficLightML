@@ -22,7 +22,10 @@ class EmergencyDetector:
     # same detections and can lower the score for the correct class.
     PROMPT_CLASSES = [
         "ambulance",
+        "ambulance vehicle",
+        "emergency ambulance",
         "fire truck",
+        "fire engine",
     ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
