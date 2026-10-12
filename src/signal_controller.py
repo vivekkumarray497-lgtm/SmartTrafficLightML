@@ -10,7 +10,6 @@ def calculate_green_time(total_vehicles):
     else:
         return 60
 
-
 def get_density(total_vehicles):
     if total_vehicles == 0:
         return "NO TRAFFIC"
@@ -22,7 +21,6 @@ def get_density(total_vehicles):
         return "HIGH"
     else:
         return "VERY HIGH"
-
 
 def get_signal_message(total_vehicles, emergency=False):
 
@@ -64,7 +62,6 @@ def get_signal_message(total_vehicles, emergency=False):
         "density": density,
         "green_time": calculate_green_time(total_vehicles)
     }
-
 
 def get_direction_signal(direction_data, emergency_direction=None):
 
@@ -113,7 +110,6 @@ def get_direction_signal(direction_data, emergency_direction=None):
         )
 
     return result
-
 
 if __name__ == "__main__":
 
