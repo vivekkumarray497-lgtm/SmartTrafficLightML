@@ -25,6 +25,13 @@ class EmergencyDetector:
         "white ambulance vehicle",
         "ambulance with emergency lights",
         "ambulance with red cross markings",
+        "white medical vehicle marked ambulance",
+        "road ambulance with medical markings",
+        "emergency medical transport ambulance",
+        "Indian ambulance vehicle",
+        "ambulance with blue flashing lights",
+        "ambulance with red stripes",
+        "patient rescue ambulance",
         "fire truck",
         "fire engine",
         "fire rescue truck",
@@ -191,12 +198,30 @@ class EmergencyDetector:
             except ValueError:
                 crop_limit = 4
 
-            # The full-frame pass is the fast path. Only run crop fallback when
-            # it found no emergency vehicle; previously every frame could trigger
-            # six extra serial model calls, causing severe lag and stale video.
+            # Always inspect a small number of vehicle crops as well as the full
+            # frame. An ambulance can be labelled as a COCO bus/truck by the main
+            # detector and be missed in the full-frame open-vocabulary pass.
+            # Skip only crops already covered by a full-frame emergency detection;
+            # one detected emergency must not suppress checks of other vehicles.
             uncovered_traffic_boxes = []
-            if not full_frame_emergency_boxes:
-                uncovered_traffic_boxes = list(traffic_boxes)
+            for traffic_item in traffic_boxes:
+                tbox = traffic_item.get("box", [])
+                if not isinstance(tbox, (list, tuple)) or len(tbox) != 4:
+                    continue
+                tx1, ty1, tx2, ty2 = map(int, tbox)
+                t_area = max(0, tx2 - tx1) * max(0, ty2 - ty1)
+                already_checked = False
+                for ex1, ey1, ex2, ey2 in full_frame_emergency_boxes:
+                    ix1, iy1 = max(tx1, ex1), max(ty1, ey1)
+                    ix2, iy2 = min(tx2, ex2), min(ty2, ey2)
+                    intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                    e_area = max(0, ex2 - ex1) * max(0, ey2 - ey1)
+                    smaller_area = min(t_area, e_area)
+                    if smaller_area > 0 and intersection / smaller_area >= 0.50:
+                        already_checked = True
+                        break
+                if not already_checked:
+                    uncovered_traffic_boxes.append(traffic_item)
 
             largest_boxes = (
                 self._select_crop_boxes(uncovered_traffic_boxes, crop_limit)
@@ -205,8 +230,8 @@ class EmergencyDetector:
             for item in largest_boxes:
                 x1, y1, x2, y2 = item["box"]
 
-                pad_x = max(12, int((x2 - x1) * 0.35))
-                pad_y = max(12, int((y2 - y1) * 0.35))
+                pad_x = max(16, int((x2 - x1) * 0.45))
+                pad_y = max(16, int((y2 - y1) * 0.45))
                 cx1 = max(0, x1 - pad_x)
                 cy1 = max(0, y1 - pad_y)
                 cx2 = min(width, x2 + pad_x)
@@ -215,8 +240,8 @@ class EmergencyDetector:
                     crop = frame[cy1:cy2, cx1:cx2]
                     crop_result = self._predict(
                         crop,
-                        confidence=min(self.confidence, 0.10),
-                        imgsz=960,
+                        confidence=min(self.confidence, 0.07),
+                        imgsz=1024,
                     )
                     results_to_parse.append((crop_result, cx1, cy1))
 
