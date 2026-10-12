@@ -3,6 +3,22 @@ import unittest
 from src.emergency_detector import EmergencyDetector
 
 class EmergencyDetectorUnitTests(unittest.TestCase):
+    def test_only_two_categories_can_trigger_emergency_priority(self):
+        self.assertEqual(EmergencyDetector.EMERGENCY_LABELS, {"ambulance", "fire truck"})
+        for label in ("bus", "truck", "van", "car", "police car"):
+            with self.subTest(label=label):
+                self.assertNotIn(label, EmergencyDetector.EMERGENCY_LABELS)
+
+    def test_emergency_prompts_use_one_canonical_name_per_category(self):
+        self.assertEqual(
+            EmergencyDetector.PROMPT_CLASSES,
+            ["ambulance", "fire truck", "bus", "truck", "van", "car", "police car"],
+        )
+
+    def test_default_emergency_confidence_is_not_forced_to_very_low_value(self):
+        detector = EmergencyDetector()
+        self.assertAlmostEqual(detector.confidence, 0.18)
+
     def test_only_ambulance_and_fire_vehicle_labels_are_emergency(self):
         self.assertEqual(EmergencyDetector._label("emergency ambulance"), "ambulance")
         self.assertEqual(EmergencyDetector._label("fire engine"), "fire truck")
