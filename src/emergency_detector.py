@@ -13,21 +13,16 @@ class EmergencyDetector:
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
-    # Multiple visual descriptions help YOLO-World match different ambulance
-    # liveries and fire-engine shapes. All synonyms map back to two canonical
-    # priority types; ordinary vehicle prompts remain present as alternatives.
+    # Keep the vocabulary compact. Large prompt lists can dilute/confuse
+    # open-vocabulary matching; use one clear label per vehicle category.
+    # Only ambulance and fire truck are allowed to trigger signal priority.
     PROMPT_CLASSES = [
         "ambulance",
-        "emergency ambulance medical vehicle",
-        "ambulance with emergency medical markings",
         "fire truck",
-        "fire engine emergency firefighting vehicle",
-        "fire department rescue truck",
-        "city bus passenger bus",
+        "city bus",
         "commercial goods truck",
         "passenger van",
-        "ordinary passenger car",
-        "police car law enforcement vehicle",
+        "police car",
     ]
 
     def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
