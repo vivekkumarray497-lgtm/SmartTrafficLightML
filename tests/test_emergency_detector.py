@@ -61,6 +61,22 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         ]
         self.assertEqual(len(EmergencyDetector._deduplicate(candidates)), 2)
 
+    def test_crop_inference_uses_lower_confidence_and_higher_resolution(self):
+        class FakeModel:
+            def __init__(self):
+                self.kwargs = None
+
+            def predict(self, image, **kwargs):
+                self.kwargs = kwargs
+                return [object()]
+
+        detector = EmergencyDetector(confidence=0.18)
+        detector.model = FakeModel()
+        detector._predict("crop-image", confidence=min(detector.confidence, 0.10), imgsz=960)
+        self.assertAlmostEqual(detector.model.kwargs["conf"], 0.10)
+        self.assertEqual(detector.model.kwargs["imgsz"], 960)
+        self.assertFalse(detector.model.kwargs["verbose"])
+
     def test_crop_selection_checks_multiple_vehicle_boxes_by_default_limit(self):
         boxes = [
             {"box": [0, 0, 20, 20]},
