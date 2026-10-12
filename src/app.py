@@ -70,7 +70,6 @@ traffic_data = {
     "mode": "Auto", "countdown": 15
 }
 
-
 def get_camera():
     global camera, camera_source_id
     with camera_lock:
@@ -99,7 +98,6 @@ def get_camera():
             camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
         return camera
 
-
 def update_state(metrics):
     global signal_started_at, signal_duration, last_signal_key
     global current_direction, signal_phase, pending_direction, phase_started_at
@@ -115,7 +113,7 @@ def update_state(metrics):
     )
 
     if emergency_active:
-        # Emergency priority overrides normal timing in the demo controller.
+
         target = metrics["emergency_direction"]
         if current_direction != target or signal_phase != "Green":
             signal_started_at = now
@@ -215,7 +213,6 @@ def detect_frame(frame, camera_direction=None):
         update_state(metrics)
         return annotated
 
-
 def reset_state():
     global signal_started_at, signal_duration, last_signal_key, current_direction, signal_phase, pending_direction, phase_started_at
     signal_started_at = time.time()
@@ -243,7 +240,6 @@ def reset_state():
             "countdown": 0 if control_mode == "Manual" else 15,
             "updated_at": "Camera stopped"
         })
-
 
 def generate_frames():
     while True:
@@ -277,28 +273,23 @@ def generate_frames():
         if ok:
             yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
 
-
 def current_state():
     with state_lock:
         result = dict(traffic_data)
         result["directions"] = dict(traffic_data["directions"])
         return result
 
-
 @app.route("/")
 def home():
     return render_template("index.html", state=current_state())
-
 
 @app.route("/video_feed")
 def video_feed():
     return Response(generate_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
-
 @app.route("/api/state")
 def api_state():
     return jsonify(current_state())
-
 
 @app.route("/api/health")
 def api_health():
@@ -318,11 +309,9 @@ def api_health():
         "camera_direction": active_camera_direction
     })
 
-
 @app.route("/api/history")
 def api_history():
     return jsonify(analytics.recent(40))
-
 
 @app.route("/api/mode", methods=["POST"])
 def api_mode():
@@ -344,7 +333,6 @@ def api_mode():
             traffic_data["countdown"] = 0
     return jsonify({"mode": control_mode, "message": f"{control_mode} mode enabled."})
 
-
 @app.route("/api/manual-control", methods=["POST"])
 def api_manual_control():
     global manual_direction, signal_started_at, last_signal_key
@@ -364,7 +352,6 @@ def api_manual_control():
         traffic_data["mode"] = "Manual"
         traffic_data["countdown"] = 0
     return jsonify({"mode": control_mode, "active_direction": manual_direction, "signal": "Green", "message": f"{manual_direction} selected for manual demonstration."})
-
 
 @app.route("/api/frame", methods=["POST"])
 def api_frame():
@@ -398,7 +385,6 @@ def api_frame():
         app.logger.exception("Browser frame processing failed")
         return jsonify({"error": f"Frame processing failed: {str(exc)[:180]}"}), 500
 
-
 @app.route("/api/camera/reset", methods=["POST"])
 def api_camera_reset():
     reset_state()
@@ -424,7 +410,6 @@ def api_cameras():
         })
     return jsonify({"cameras": configured, "active_camera_id": active_camera_id, "camera_direction": active_camera_direction})
 
-
 @app.route("/api/cameras/select", methods=["POST"])
 def api_camera_select():
     global active_camera_id, active_camera_direction, camera, camera_source_id
@@ -448,7 +433,6 @@ def api_camera_select():
         "camera_direction": active_camera_direction,
         "message": f"Camera source selected for {active_camera_direction}. Open or refresh the server camera feed."
     })
-
 
 @app.route("/api/control", methods=["POST"])
 def api_control():
@@ -537,11 +521,9 @@ def predict():
             error=f"Invalid input: {exc}"
         ), 400
 
-
 @app.errorhandler(413)
 def request_too_large(_error):
     return jsonify({"error": "Camera frame is too large. Please use a lower camera resolution."}), 413
-
 
 if __name__ == "__main__":
     print("Smart Traffic Light ML Started")
