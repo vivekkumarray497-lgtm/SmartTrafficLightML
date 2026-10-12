@@ -13,9 +13,16 @@ class EmergencyDetector:
     """
 
     EMERGENCY_LABELS = {"ambulance", "fire truck"}
+    # Multiple visual descriptions help YOLO-World match different ambulance
+    # liveries and fire-engine shapes. All synonyms map back to two canonical
+    # priority types; ordinary vehicle prompts remain present as alternatives.
     PROMPT_CLASSES = [
-        "ambulance emergency medical vehicle with medical markings",
-        "fire truck fire engine emergency firefighting vehicle",
+        "ambulance",
+        "emergency ambulance medical vehicle",
+        "ambulance with emergency medical markings",
+        "fire truck",
+        "fire engine emergency firefighting vehicle",
+        "fire department rescue truck",
         "city bus passenger bus",
         "commercial goods truck",
         "passenger van",
