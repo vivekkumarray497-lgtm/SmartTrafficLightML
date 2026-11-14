@@ -2,17 +2,6 @@ name: Train and evaluate traffic models
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "src/train_model.py"
-      - "src/train_policy_model.py"
-      - "dataset/cleaned_traffic_data.csv"
-      - ".github/workflows/train-model.yml"
-
-permissions:
-  contents: write
 
 concurrency:
   group: traffic-model-training
@@ -55,15 +44,3 @@ jobs:
             reports/traffic_policy_evaluation.json
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Commit improved model and evaluation report
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add model/random_forest_model.pkl reports/model_evaluation.json model/traffic_priority_model.pkl reports/traffic_policy_evaluation.json dataset/traffic_priority_training_data.csv
-          if git diff --cached --quiet; then
-            echo "No model or report changes to commit."
-          else
-            git commit -m "Retrain traffic signal prediction model"
-            git push origin HEAD:main
-          fi
