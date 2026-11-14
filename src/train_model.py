@@ -121,12 +121,29 @@ def main():
     candidate_accuracy = accuracy_score(y_test, best_model.predict(X_test))
 
     previous_accuracy = None
-    if os.path.exists(MODEL_PATH):
+    previous_comparison_status = "no previous model"
+    previous_protocol_is_comparable = False
+    if os.path.exists(REPORT_PATH):
+        try:
+            with open(REPORT_PATH, "r", encoding="utf-8") as handle:
+                previous_report = json.load(handle)
+            previous_split = str(previous_report.get("split", "")).lower()
+            previous_protocol_is_comparable = previous_split.startswith("chronological first 80%")
+        except (OSError, ValueError, TypeError):
+            previous_protocol_is_comparable = False
+
+    if os.path.exists(MODEL_PATH) and previous_protocol_is_comparable:
         try:
             previous_model = joblib.load(MODEL_PATH)
             previous_accuracy = accuracy_score(y_test, previous_model.predict(X_test[FEATURES]))
+            previous_comparison_status = "compared on the same chronological holdout"
         except Exception as exc:
-            print(f"Existing model could not be compared: {exc}")
+            previous_comparison_status = f"previous model comparison failed: {exc}"
+    elif os.path.exists(MODEL_PATH):
+        previous_comparison_status = (
+            "previous model was trained/evaluated with a different split protocol; "
+            "retraining on chronological training data"
+        )
 
     promoted = previous_accuracy is None or candidate_accuracy > previous_accuracy
     if promoted:
@@ -149,6 +166,7 @@ def main():
         "cross_validation_method": "training-only expanding-window TimeSeriesSplit (5 folds)",
         "majority_baseline_accuracy": round(float(majority_accuracy), 4),
         "previous_model_holdout_accuracy": None if previous_accuracy is None else round(float(previous_accuracy), 4),
+        "previous_model_comparison_status": previous_comparison_status,
         "best_candidate_by_training_cv": best_name,
         "selected_estimator": type(best_model).__name__,
         "feature_importance": (
