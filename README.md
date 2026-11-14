@@ -172,3 +172,11 @@ The dashboard's **Overall Traffic System Accuracy** uses human-verified camera s
 5. A sample is correct only when all four outputs match the human-verified labels. Component scores are reported separately. Emergency-class accuracy is withheld until at least five positive emergency scenes and five no-emergency scenes have been labelled.
 
 The result estimates performance on the reviewed validation samples only. It is not a guarantee of performance at every junction and does not certify the system as safe for live road deployment. A larger, independently reviewed test set (preferably 200+ diverse samples) is recommended before reporting a deployment claim.
+
+## Four-class traffic vehicle detector training
+
+The application uses the built-in YOLO11n COCO model by default. To fine-tune a project-specific detector for cars, bikes, buses and trucks, use the public Roboflow **Vehicle detection** dataset (release 1, 2,741 images, CC BY 4.0; attribution: Shubhams Workspace). The training script consolidates case variants into four project categories and evaluates the held-out test split.
+
+In Colab, clone/pull this repository, install the optional training dependencies with `pip install roboflow pyyaml`, set `ROBOFLOW_API_KEY` privately, and run `python src/train_vehicle_detector.py`. The script writes `reports/traffic_vehicle_detector_evaluation.json`. It copies `model/traffic_vehicle_detector.pt` into the application only when held-out test mAP@50 is at least 0.80; otherwise the built-in model remains active. mAP@50 is an object-detection metric, not overall traffic-system accuracy.
+
+Dataset page: https://universe.roboflow.com/shubhams-workspace-wokrm/vehicle-detection-eckrb-cppsf
