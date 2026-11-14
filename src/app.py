@@ -125,6 +125,7 @@ traffic_data = {
     "emergency_candidate_type": "", "emergency_candidate_direction": "",
     "emergency_candidate_confidence": 0.0, "emergency_status": "no_candidate",
     "directions": {d: 0 for d in DIRECTIONS},
+    "pedestrian_directions": {d: 0 for d in DIRECTIONS},
     "active_direction": "North", "green_time": 0,
     "signal": "All Red", "signal_message": "SYSTEM STARTUP - ALL-RED SAFE HOLD",
     "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
@@ -240,7 +241,8 @@ def update_state(metrics):
 
     adaptive = controller.decide(
         metrics["directions"], metrics["pedestrians"], metrics["emergency"],
-        metrics.get("emergency_direction")
+        metrics.get("emergency_direction"),
+        pedestrian_directions=metrics.get("pedestrian_directions"),
     )
     now = time.time()
     emergency_target = (
@@ -417,6 +419,10 @@ def update_state(metrics):
             "vehicle_class_confidence": dict(metrics.get("vehicle_class_confidence", {})),
             "pedestrian_confidence": metrics.get("pedestrian_confidence"),
             "directions": dict(metrics["directions"]),
+            "pedestrian_directions": dict(metrics.get(
+                "pedestrian_directions",
+                {direction: 0 for direction in DIRECTIONS},
+            )),
             "active_direction": active,
             "green_time": active_info["green_time"] if control_mode == "Auto" else 0,
             "signal": signal,
@@ -449,6 +455,10 @@ def detect_frame(frame, camera_direction=None):
         if camera_direction in DIRECTIONS:
             metrics["directions"] = {
                 direction: metrics["total_vehicles"] if direction == camera_direction else 0
+                for direction in DIRECTIONS
+            }
+            metrics["pedestrian_directions"] = {
+                direction: metrics["pedestrians"] if direction == camera_direction else 0
                 for direction in DIRECTIONS
             }
             if metrics.get("emergency"):
@@ -486,6 +496,7 @@ def reset_state():
             "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
             "queue_length": 0, "avg_waiting_time": 0.0,
             "directions": {d: 0 for d in DIRECTIONS},
+            "pedestrian_directions": {d: 0 for d in DIRECTIONS},
             "active_direction": reset_direction, "green_time": 0,
             "signal": "All Red",
             "signal_message": "CAMERA RESET / INPUT LOST - ALL-RED SAFE HOLD",
@@ -549,6 +560,9 @@ def current_state():
     with state_lock:
         result = dict(traffic_data)
         result["directions"] = dict(traffic_data["directions"])
+        result["pedestrian_directions"] = dict(traffic_data.get(
+            "pedestrian_directions", {direction: 0 for direction in DIRECTIONS}
+        ))
         result["model_accuracy"] = MODEL_EVALUATION["accuracy"]
         result["model_accuracy_samples"] = MODEL_EVALUATION["samples"]
         result["model_accuracy_status"] = MODEL_EVALUATION["status"]
@@ -667,6 +681,9 @@ def _current_metrics_snapshot():
             "queue_length": traffic_data.get("queue_length", 0),
             "avg_waiting_time": traffic_data.get("avg_waiting_time", 0.0),
             "directions": dict(traffic_data.get("directions", {d: 0 for d in DIRECTIONS})),
+            "pedestrian_directions": dict(traffic_data.get(
+                "pedestrian_directions", {d: 0 for d in DIRECTIONS}
+            )),
             "emergency": bool(traffic_data.get("emergency")),
             "emergency_type": traffic_data.get("emergency_type", ""),
             "emergency_direction": traffic_data.get("emergency_direction", ""),
@@ -828,6 +845,9 @@ def api_control():
             "queue_length": traffic_data["queue_length"],
             "avg_waiting_time": traffic_data["avg_waiting_time"],
             "directions": dict(traffic_data["directions"]),
+            "pedestrian_directions": dict(traffic_data.get(
+                "pedestrian_directions", {d: 0 for d in DIRECTIONS}
+            )),
             "emergency": emergency,
             "emergency_type": emergency_type,
             "emergency_direction": emergency_direction
