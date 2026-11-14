@@ -25,15 +25,15 @@ class OperationalEvaluatorTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_accuracy_is_not_reported_before_minimum_sample_count(self):
-        self.evaluator.record(self.prediction, self.actual)
+        self.evaluator.record(self.prediction, self.actual, "frame-1")
         summary = self.evaluator.summary()
         self.assertIsNone(summary["accuracy"])
         self.assertEqual(summary["status"], "collecting")
         self.assertEqual(summary["remaining_samples"], 2)
 
     def test_exact_match_accuracy_is_reported_after_minimum_samples(self):
-        for _ in range(3):
-            self.evaluator.record(self.prediction, self.actual)
+        for index in range(3):
+            self.evaluator.record(self.prediction, self.actual, f"frame-{index}")
         summary = self.evaluator.summary()
         self.assertEqual(summary["accuracy"], 100.0)
         self.assertEqual(summary["correct_samples"], 3)
@@ -42,8 +42,8 @@ class OperationalEvaluatorTests(unittest.TestCase):
     def test_any_component_mismatch_makes_the_whole_sample_incorrect(self):
         wrong = dict(self.actual)
         wrong["direction"] = "South"
-        for actual in (self.actual, self.actual, wrong):
-            self.evaluator.record(self.prediction, actual)
+        for index, actual in enumerate((self.actual, self.actual, wrong)):
+            self.evaluator.record(self.prediction, actual, f"frame-{index}")
         summary = self.evaluator.summary()
         self.assertAlmostEqual(summary["accuracy"], 66.7)
         self.assertEqual(summary["component_accuracy"]["direction"], 66.7)
@@ -52,7 +52,17 @@ class OperationalEvaluatorTests(unittest.TestCase):
         invalid = dict(self.actual)
         invalid["emergency_type"] = "police"
         with self.assertRaises(ValueError):
-            self.evaluator.record(self.prediction, invalid)
+            self.evaluator.record(self.prediction, invalid, "frame-invalid")
+
+    def test_same_camera_frame_cannot_be_submitted_twice(self):
+        self.evaluator.record(self.prediction, self.actual, "session-1:frame-1")
+        with self.assertRaises(ValueError):
+            self.evaluator.record(self.prediction, self.actual, "session-1:frame-1")
+        self.assertEqual(self.evaluator.summary()["total_samples"], 1)
+
+    def test_frame_id_is_required(self):
+        with self.assertRaises(ValueError):
+            self.evaluator.record(self.prediction, self.actual, "")
 
     def test_emergency_accuracy_requires_positive_and_negative_examples(self):
         for _ in range(3):
