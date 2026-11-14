@@ -587,7 +587,11 @@ def generate_frames():
             consecutive_inference_errors = 0
         except Exception as exc:
             consecutive_inference_errors += 1
-            if consecutive_inference_errors >= 2 and not camera_loss_latched:
+            with state_lock:
+                browser_recent = time.time() - last_browser_frame_at <= 3.0
+            if browser_recent:
+                camera_loss_latched = False
+            elif consecutive_inference_errors >= 2 and not camera_loss_latched:
                 reset_state()
                 camera_loss_latched = True
             cv2.putText(
