@@ -45,7 +45,7 @@
 <div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted" id="emergencyStatus">No ambulance or fire-truck candidate in the current frame.</p><p class="muted">Candidate confidence is the AI model score, not verified accuracy. GREEN priority activates only after repeated-frame confirmation. Police, buses and ordinary trucks do not trigger emergency priority.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
 <div class="card"><h2>🤖 Legacy Signal-Label Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Retained for comparison with the original dataset labels. The live controller uses YOLO vehicle counts and the adaptive traffic controller.</p></div>
 <div class="card"><h2>📈 Traffic Priority Model Evaluation</h2><div class="stats"><div class="stat">Held-out Policy Agreement<strong>{% if state.policy_model_agreement is not none %}{{state.policy_model_agreement}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Test Records<strong>{{state.policy_model_samples}}</strong></div></div><p class="muted">Model: {{state.policy_model_name}} · Evaluation: {{state.policy_model_metric}}. This measures agreement with the documented LOW / MEDIUM / HIGH traffic-pressure policy on later dataset records. It is not real-world or live-camera accuracy.</p></div>
-<div class="card"><h2>📊 Overall Model Evaluation Snapshot</h2><div class="stats"><div class="stat">Legacy Signal Holdout Accuracy<strong>{% if state.model_accuracy is not none %}{{state.model_accuracy}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Traffic Policy Agreement<strong>{% if state.policy_model_agreement is not none %}{{state.policy_model_agreement}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Emergency Detection Accuracy<strong>Not measured</strong></div></div><p class="muted">Legacy signal-label model: 37.0% on 400 held-out rows. Traffic policy model: 95.5% agreement on 400 held-out rows using policy-generated labels. Emergency detection has no independently labelled test set in this repository, so its accuracy cannot yet be reported. These scores measure different tasks and must not be combined into one overall percentage.</p></div>
+<div class="card"><h2>📊 Overall Model Evaluation Snapshot</h2><div class="stats"><div class="stat">Legacy Signal Holdout Accuracy<strong>{% if state.model_accuracy is not none %}{{state.model_accuracy}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Traffic Policy Agreement<strong>{% if state.policy_model_agreement is not none %}{{state.policy_model_agreement}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Emergency Detection Accuracy<strong>Not measured</strong></div></div><p class="muted">Legacy signal-label model: {{state.model_accuracy}}% on {{state.model_accuracy_samples}} held-out rows. Traffic policy model: {{state.policy_model_agreement}}% agreement on {{state.policy_model_samples}} held-out rows using policy-generated labels. Emergency detection has no independently labelled test set in this repository, so its accuracy cannot yet be reported. These scores measure different tasks and must not be combined into one overall percentage.</p></div>
 <div class="card"><h2>📊 Live Overall Result Confidence</h2>
 <div class="stats"><div class="stat">Current Camera Result<strong id="liveConfidence">{% if state.live_confidence is not none %}{{state.live_confidence}}%{% else %}Waiting for detections{% endif %}</strong></div>
 <div class="stat">Objects Evaluated<strong id="liveConfidenceSamples">{{state.live_confidence_samples}}</strong></div></div>
@@ -89,15 +89,16 @@ function render(s) {
 
   const em = document.getElementById('emergency');
   const hasEmergencyCandidate = Boolean(s.emergency_candidate_type);
-  const candidateName = s.emergency_candidate_type === 'fire truck' ? 'FIRE TRUCK' : 'AMBULANCE';
+  const candidateName = String(s.emergency_candidate_type || '').toLowerCase().includes('fire') ? 'FIRE TRUCK' : 'AMBULANCE';
+  const confirmedName = String(s.emergency_type || '').toLowerCase().includes('fire') ? 'FIRE TRUCK' : 'AMBULANCE';
   em.textContent = s.emergency
-    ? ('🚨 ' + (s.emergency_type === 'fire_truck' ? 'FIRE TRUCK' : 'AMBULANCE') + ' DETECTED — AUTOMATIC PRIORITY ACTIVE')
+    ? ('🚨 ' + confirmedName + ' DETECTED — AUTOMATIC PRIORITY ACTIVE')
     : (hasEmergencyCandidate
         ? ('🟠 POSSIBLE ' + candidateName + ' — CONFIRMING ACROSS FRAMES')
         : '🟢 Monitoring for Ambulance / Fire Truck');
   em.className = 'emergency ' + (s.emergency ? 'priority' : (hasEmergencyCandidate ? 'candidate' : ''));
   document.getElementById('emergencyType').textContent = s.emergency_type
-    || (hasEmergencyCandidate ? 'Possible ' + (s.emergency_candidate_type === 'fire truck' ? 'Fire Truck' : 'Ambulance') : 'None');
+    || (hasEmergencyCandidate ? 'Possible ' + (String(s.emergency_candidate_type).toLowerCase().includes('fire') ? 'Fire Truck' : 'Ambulance') : 'None');
   document.getElementById('emergencyDirection').textContent = s.emergency_direction
     || s.emergency_candidate_direction || '—';
   const emergencyScore = s.emergency
