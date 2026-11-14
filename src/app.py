@@ -817,13 +817,13 @@ def api_frame():
         frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise ValueError("Invalid JPEG frame")
-        last_browser_frame_at = time.time()
-        camera_loss_latched = False
 
         requested_direction = str(payload.get("direction", active_camera_direction)).title()
         if requested_direction not in DIRECTIONS:
             return jsonify({"error": "Direction must be North, South, East, or West."}), 400
         annotated = detect_frame(frame, camera_direction=requested_direction)
+        last_browser_frame_at = time.time()
+        camera_loss_latched = False
         ok, buffer = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
         if not ok:
             raise RuntimeError("Could not encode processed frame")
