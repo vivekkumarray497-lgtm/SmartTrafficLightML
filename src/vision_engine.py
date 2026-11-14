@@ -11,6 +11,7 @@ class VisionEngine:
     def __init__(self, model, emergency_detector=None):
         self.model = model
         self.emergency_detector = emergency_detector
+        self.vehicle_classes, self.person_classes = self._resolve_model_classes(model)
         try:
             self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.22"))
         except ValueError:
@@ -24,6 +25,47 @@ class VisionEngine:
         self.history = defaultdict(lambda: deque(maxlen=20))
         self.first_seen = {}
         self.stationary_since = {}
+
+    @classmethod
+    def _resolve_model_classes(cls, model):
+        names = getattr(model, "names", None)
+        if isinstance(names, list):
+            names = dict(enumerate(names))
+        if not isinstance(names, dict) or not names:
+            return dict(cls.VEHICLES), {0}
+
+        vehicle_classes = {}
+        person_classes = set()
+        aliases = {
+            "car": "cars",
+            "cars": "cars",
+            "bicycle": "bikes",
+            "bike": "bikes",
+            "bikes": "bikes",
+            "motorbike": "bikes",
+            "motorcycle": "bikes",
+            "motorcycles": "bikes",
+            "bus": "buses",
+            "buses": "buses",
+            "truck": "trucks",
+            "trucks": "trucks",
+            "lorry": "trucks",
+            "mini truck": "trucks",
+            "mini_truck": "trucks",
+            "person": "person",
+            "people": "person",
+        }
+        for class_id, raw_name in names.items():
+            label = str(raw_name).strip().lower().replace("-", " ").replace("_", " ")
+            category = aliases.get(label)
+            if category == "person":
+                person_classes.add(int(class_id))
+            elif category:
+                vehicle_classes[int(class_id)] = category
+
+        if not vehicle_classes:
+            return dict(cls.VEHICLES), {0}
+        return vehicle_classes, person_classes
 
     def _direction(self, x, y, w, h):
         dx = x - w / 2
@@ -55,7 +97,7 @@ class VisionEngine:
             imgsz=self.image_size,
             max_det=500,
             verbose=False,
-            classes=[0, 2, 3, 5, 7],
+            classes=sorted(set(self.vehicle_classes) | self.person_classes),
         )[0]
 
         boxes = result.boxes
@@ -67,21 +109,23 @@ class VisionEngine:
                 cx = (x1 + x2) // 2
                 cy = (y1 + y2) // 2
 
-                if cid == 0:
+                if cid in self.person_classes:
                     pedestrian_detection_confidences.append(conf)
                     pedestrians += 1
                     name = "Person"
                     label_color = (255, 180, 0)
-                elif cid in self.VEHICLES:
-                    key = self.VEHICLES[cid]
+                elif cid in self.vehicle_classes:
+                    key = self.vehicle_classes[cid]
                     vehicle_detection_confidences.append(conf)
                     class_detection_confidences[key].append(conf)
                     counts[key] += 1
                     directions[self._direction(cx, cy, w, h)] += 1
-                    name = key[:-1].title()
+                    name = {"cars": "Car", "bikes": "Bike", "buses": "Bus", "trucks": "Truck"}[key]
                     label_color = (0, 255, 0)
+                    canonical_class_id = {"cars": 2, "bikes": 3, "buses": 5, "trucks": 7}[key]
                     traffic_boxes.append({
-                        "class_id": cid,
+                        "class_id": canonical_class_id,
+                        "model_class_id": cid,
                         "box": [x1, y1, x2, y2],
                     })
                 else:
