@@ -112,8 +112,14 @@ class OperationalEvaluator:
         except (OSError, csv.Error):
             rows = []
 
-        total = len(rows)
-        correct = sum(str(row.get("exact_match", "0")) == "1" for row in rows)
+        # Rows from the older schema have no scene_id and cannot be verified
+        # as unique camera frames. Keep them in the CSV for audit history,
+        # but exclude them from the measured validation sample count.
+        valid_rows = [row for row in rows if str(row.get("scene_id", "")).strip()]
+        total = len(valid_rows)
+        correct = sum(
+            str(row.get("exact_match", "0")) == "1" for row in valid_rows
+        )
         enough_samples = total >= self.minimum_samples
         result = {
             "accuracy": round(correct / total * 100, 1) if enough_samples and total else None,
@@ -136,18 +142,24 @@ class OperationalEvaluator:
             else:
                 matches = sum(
                     row.get(f"predicted_{field}") == row.get(f"actual_{field}")
-                    for row in rows
+                    for row in valid_rows
                 )
                 result["component_accuracy"][field] = round(matches / total * 100, 1)
 
-        positive = sum(row.get("actual_emergency_type") in {"ambulance", "fire_truck"} for row in rows)
-        negative = sum(row.get("actual_emergency_type") == "none" for row in rows)
+        positive = sum(
+            row.get("actual_emergency_type") in {"ambulance", "fire_truck"}
+            for row in valid_rows
+        )
+        negative = sum(
+            row.get("actual_emergency_type") == "none"
+            for row in valid_rows
+        )
         result["emergency_positive_samples"] = int(positive)
         result["emergency_negative_samples"] = int(negative)
         if positive >= 5 and negative >= 5:
             matches = sum(
                 row.get("predicted_emergency_type") == row.get("actual_emergency_type")
-                for row in rows
+                for row in valid_rows
             )
             result["emergency_accuracy"] = round(matches / total * 100, 1)
             result["emergency_validation_status"] = "available"
