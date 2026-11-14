@@ -52,8 +52,12 @@ from camera_config import CAMERAS, ACTIVE_CAMERA_ID
 
 model = joblib.load(MODEL_PATH)
 yolo_model = YOLO(YOLO_MODEL_PATH)
+person_model = (
+    YOLO(DEFAULT_YOLO_MODEL_PATH)
+    if YOLO_MODEL_PATH == CUSTOM_VEHICLE_MODEL_PATH else None
+)
 emergency_detector = EmergencyDetector()
-vision = VisionEngine(yolo_model, emergency_detector)
+vision = VisionEngine(yolo_model, emergency_detector, person_model=person_model)
 controller = AdaptiveController()
 analytics = AnalyticsStore(HISTORY_PATH)
 operational_evaluator = OperationalEvaluator(
@@ -87,7 +91,7 @@ signal_mapping = {0: "Red", 1: "Yellow", 2: "Green"}
 DIRECTIONS = ["North", "South", "East", "West"]
 
 traffic_data = {
-    "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "traffic": 0,
+    "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "auto_rickshaws": 0, "traffic": 0,
     "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
     "queue_length": 0, "avg_waiting_time": 0.0, "emergency": False,
     "emergency_candidate_type": "", "emergency_candidate_direction": "",
@@ -269,6 +273,7 @@ def update_state(metrics):
             "bikes": metrics["bikes"],
             "trucks": metrics["trucks"],
             "buses": metrics["buses"],
+            "auto_rickshaws": metrics.get("auto_rickshaws", 0),
             "traffic": metrics["total_vehicles"],
             "speed": metrics["avg_speed"],
             "pedestrians": metrics["pedestrians"],
@@ -335,7 +340,7 @@ def reset_state():
     phase_started_at = time.time()
     with state_lock:
         traffic_data.update({
-            "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "traffic": 0,
+            "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "auto_rickshaws": 0, "traffic": 0,
             "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
             "queue_length": 0, "avg_waiting_time": 0.0,
             "directions": {d: 0 for d in DIRECTIONS},
@@ -477,6 +482,7 @@ def api_health():
         "vehicle_detector": yolo_model is not None,
         "vehicle_model_path": os.path.basename(YOLO_MODEL_PATH),
         "vehicle_model_type": "custom" if YOLO_MODEL_PATH == CUSTOM_VEHICLE_MODEL_PATH else "coco_fallback",
+        "person_detector_path": os.path.basename(DEFAULT_YOLO_MODEL_PATH) if person_model is not None else "shared_vehicle_model",
         "vehicle_detection_confidence_threshold": vision.confidence_threshold,
         "vehicle_detection_image_size": vision.image_size,
         "emergency_detector": emergency_detector.available,
@@ -640,6 +646,7 @@ def api_control():
             "bikes": traffic_data["bikes"],
             "trucks": traffic_data["trucks"],
             "buses": traffic_data["buses"],
+            "auto_rickshaws": traffic_data.get("auto_rickshaws", 0),
             "total_vehicles": traffic_data["traffic"],
             "pedestrians": traffic_data["pedestrians"],
             "avg_speed": traffic_data["speed"],
