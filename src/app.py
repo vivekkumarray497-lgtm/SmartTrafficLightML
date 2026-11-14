@@ -590,6 +590,32 @@ def api_health():
 def api_history():
     return jsonify(analytics.recent(40))
 
+def _current_metrics_snapshot():
+    with state_lock:
+        return {
+            "cars": traffic_data.get("cars", 0),
+            "bikes": traffic_data.get("bikes", 0),
+            "buses": traffic_data.get("buses", 0),
+            "trucks": traffic_data.get("trucks", 0),
+            "auto_rickshaws": traffic_data.get("auto_rickshaws", 0),
+            "total_vehicles": traffic_data.get("traffic", 0),
+            "pedestrians": traffic_data.get("pedestrians", 0),
+            "avg_speed": traffic_data.get("speed", 0.0),
+            "density": traffic_data.get("density", "NO TRAFFIC"),
+            "queue_length": traffic_data.get("queue_length", 0),
+            "avg_waiting_time": traffic_data.get("avg_waiting_time", 0.0),
+            "directions": dict(traffic_data.get("directions", {d: 0 for d in DIRECTIONS})),
+            "emergency": bool(traffic_data.get("emergency")),
+            "emergency_type": traffic_data.get("emergency_type", ""),
+            "emergency_direction": traffic_data.get("emergency_direction", ""),
+            "emergency_confidence": traffic_data.get("emergency_confidence", 0.0),
+            "emergency_candidate_type": traffic_data.get("emergency_candidate_type", ""),
+            "emergency_candidate_direction": traffic_data.get("emergency_candidate_direction", ""),
+            "emergency_candidate_confidence": traffic_data.get("emergency_candidate_confidence", 0.0),
+            "emergency_status": traffic_data.get("emergency_status", "no_candidate"),
+        }
+
+
 @app.route("/api/mode", methods=["POST"])
 def api_mode():
     global control_mode, signal_started_at, last_signal_key
@@ -600,15 +626,11 @@ def api_mode():
     control_mode = requested_mode
     signal_started_at = time.time()
     last_signal_key = None
-    with state_lock:
-        traffic_data["mode"] = control_mode
-        if control_mode == "Manual":
-            traffic_data["active_direction"] = manual_direction
-            traffic_data["signal"] = "Green"
-            traffic_data["signal_message"] = f"MANUAL DEMO MODE - {manual_direction} GREEN"
-            traffic_data["green_time"] = 0
-            traffic_data["countdown"] = 0
-    return jsonify({"mode": control_mode, "message": f"{control_mode} mode enabled."})
+    update_state(_current_metrics_snapshot())
+    return jsonify({
+        "mode": control_mode,
+        "message": f"{control_mode} mode enabled with safe signal clearance."
+    })
 
 @app.route("/api/manual-control", methods=["POST"])
 def api_manual_control():
@@ -622,13 +644,16 @@ def api_manual_control():
     manual_direction = requested_direction
     signal_started_at = time.time()
     last_signal_key = None
-    with state_lock:
-        traffic_data["active_direction"] = manual_direction
-        traffic_data["signal"] = "Green"
-        traffic_data["signal_message"] = f"MANUAL DEMO MODE — {manual_direction} selected GREEN"
-        traffic_data["mode"] = "Manual"
-        traffic_data["countdown"] = 0
-    return jsonify({"mode": control_mode, "active_direction": manual_direction, "signal": "Green", "message": f"{manual_direction} selected for manual demonstration."})
+    update_state(_current_metrics_snapshot())
+    return jsonify({
+        "mode": control_mode,
+        "active_direction": current_direction,
+        "signal": signal_phase,
+        "message": (
+            f"{manual_direction} selected. Signal changes only after Yellow "
+            "and All-Red clearance."
+        )
+    })
 
 @app.route("/api/frame", methods=["POST"])
 def api_frame():
