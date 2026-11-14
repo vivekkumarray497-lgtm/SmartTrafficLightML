@@ -101,11 +101,12 @@ jobs:
           assert app.EmergencyDetector._label("ambulance van") == "ambulance"
           assert app.EmergencyDetector._label("police car") not in app.EmergencyDetector.EMERGENCY_LABELS
 
-          # Verify normal direction changes include a yellow clearance phase.
+          # Verify normal changes use Yellow -> All Red -> Green clearance.
           app.control_mode = "Auto"
           app.current_direction = "North"
           app.signal_phase = "Green"
           app.pending_direction = None
+          app.pending_is_emergency = False
           app.signal_started_at = 1000.0
           app.phase_started_at = 1000.0
           app.signal_duration = 15
@@ -120,12 +121,43 @@ jobs:
           with patch("app.time.time", return_value=1016.0):
               app.update_state(phase_metrics)
           assert app.traffic_data["signal"] == "Yellow", app.traffic_data
+          with patch("app.time.time", return_value=1019.0):
+              app.update_state(phase_metrics)
+          assert app.traffic_data["signal"] == "All Red", app.traffic_data
           with patch("app.time.time", return_value=1020.0):
               app.update_state(phase_metrics)
           assert app.traffic_data["signal"] == "Green", app.traffic_data
           assert app.traffic_data["active_direction"] == "East", app.traffic_data
 
-          print("Emergency label and yellow-clearance regression checks: PASS")
+          # Emergency preemption must not jump directly to GREEN.
+          app.current_direction = "North"
+          app.signal_phase = "Green"
+          app.pending_direction = None
+          app.pending_is_emergency = False
+          app.signal_started_at = 2000.0
+          app.phase_started_at = 2000.0
+          app.signal_duration = 15
+          emergency_metrics = dict(
+              phase_metrics,
+              emergency=True,
+              emergency_type="ambulance",
+              emergency_direction="East",
+          )
+          with patch("app.time.time", return_value=2000.0):
+              app.update_state(emergency_metrics)
+          assert app.traffic_data["signal"] == "Yellow", app.traffic_data
+          assert app.traffic_data["emergency_priority_active"] is False, app.traffic_data
+          with patch("app.time.time", return_value=2003.0):
+              app.update_state(emergency_metrics)
+          assert app.traffic_data["signal"] == "All Red", app.traffic_data
+          assert app.traffic_data["emergency_priority_active"] is False, app.traffic_data
+          with patch("app.time.time", return_value=2004.0):
+              app.update_state(emergency_metrics)
+          assert app.traffic_data["signal"] == "Green", app.traffic_data
+          assert app.traffic_data["active_direction"] == "East", app.traffic_data
+          assert app.traffic_data["emergency_priority_active"] is True, app.traffic_data
+
+          print("Emergency label, pedestrian, vehicle mapping and signal-clearance regression checks: PASS")
           print("Runtime smoke test: PASS")
           print("Health:", health_data)
           print("State/API/frame/control checks: PASS")
