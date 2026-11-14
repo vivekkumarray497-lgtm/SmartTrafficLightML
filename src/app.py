@@ -103,7 +103,7 @@ signal_started_at = time.time()
 signal_duration = 15
 last_signal_key = None
 current_direction = "North"
-signal_phase = "Green"
+signal_phase = "All Red"
 pending_direction = None
 pending_is_emergency = False
 phase_started_at = time.time()
@@ -125,10 +125,10 @@ traffic_data = {
     "emergency_candidate_type": "", "emergency_candidate_direction": "",
     "emergency_candidate_confidence": 0.0, "emergency_status": "no_candidate",
     "directions": {d: 0 for d in DIRECTIONS},
-    "active_direction": "North", "green_time": 15,
-    "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
+    "active_direction": "North", "green_time": 0,
+    "signal": "All Red", "signal_message": "SYSTEM STARTUP - ALL-RED SAFE HOLD",
     "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
-    "mode": "Auto", "countdown": 15, "frame_id": "",
+    "mode": "Auto", "countdown": ALL_RED_DURATION, "frame_id": "",
     "live_confidence": None, "live_confidence_samples": 0,
     "vehicle_confidence": None, "vehicle_confidence_samples": 0,
     "vehicle_class_confidence": {}, "pedestrian_confidence": None
@@ -461,26 +461,34 @@ def detect_frame(frame, camera_direction=None):
         return annotated
 
 def reset_state():
-    global signal_started_at, signal_duration, last_signal_key, current_direction, signal_phase, pending_direction, phase_started_at
-    signal_started_at = time.time()
-    signal_duration = 15
-    last_signal_key = None
+    global signal_started_at, signal_duration, last_signal_key
+    global current_direction, signal_phase, pending_direction, phase_started_at
     global pending_is_emergency
-    reset_direction = manual_direction if control_mode == "Manual" else "North"
+
+    now = time.time()
+    reset_direction = (
+        current_direction if current_direction in DIRECTIONS
+        else (manual_direction if control_mode == "Manual" else "North")
+    )
     current_direction = reset_direction
-    signal_phase = "Green"
+    signal_phase = "All Red"
     pending_direction = None
     pending_is_emergency = False
-    phase_started_at = time.time()
+    signal_started_at = now
+    phase_started_at = now
+    signal_duration = 0
+    last_signal_key = None
+
     with state_lock:
         traffic_data.update({
-            "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "auto_rickshaws": 0, "traffic": 0,
+            "cars": 0, "bikes": 0, "trucks": 0, "buses": 0,
+            "auto_rickshaws": 0, "traffic": 0,
             "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
             "queue_length": 0, "avg_waiting_time": 0.0,
             "directions": {d: 0 for d in DIRECTIONS},
-            "active_direction": reset_direction, "green_time": 0 if control_mode == "Manual" else 15,
-            "signal": "Green",
-            "signal_message": f"{'MANUAL DEMO MODE - ' + reset_direction + ' GREEN' if control_mode == 'Manual' else 'No traffic - GREEN LIGHT'}",
+            "active_direction": reset_direction, "green_time": 0,
+            "signal": "All Red",
+            "signal_message": "CAMERA RESET / INPUT LOST - ALL-RED SAFE HOLD",
             "emergency": False,
             "emergency_priority_active": False,
             "emergency_type": "",
@@ -498,9 +506,12 @@ def reset_state():
             "vehicle_class_confidence": {},
             "pedestrian_confidence": None,
             "mode": control_mode,
-            "countdown": 0 if control_mode == "Manual" else 15,
-            "updated_at": "Camera stopped"
+            "countdown": ALL_RED_DURATION,
+            "updated_at": "Camera stopped",
         })
+    with state_lock:
+        frame_observations.clear()
+
 
 def generate_frames():
     while True:
