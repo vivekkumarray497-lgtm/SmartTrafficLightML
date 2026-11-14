@@ -19,7 +19,7 @@ import pandas as pd
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier, HistGradientBoostingClassifier, GradientBoostingClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASET_PATH = os.path.join(BASE_DIR, "dataset", "cleaned_traffic_data.csv")
@@ -51,6 +51,7 @@ def load_data():
         raise ValueError(f"Dataset is missing required columns: {missing}")
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df = df.dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
     df["hour"] = df["timestamp"].dt.hour
     df["minute"] = df["timestamp"].dt.minute
     df["day"] = df["timestamp"].dt.day
@@ -71,10 +72,12 @@ def load_data():
 
 def main():
     X, y = load_data()
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.20, random_state=42, stratify=y
-    )
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    split_index = int(len(X) * 0.80)
+    X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
+    y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
+    if y_train.nunique() < 2 or y_test.nunique() < 2:
+        raise ValueError("Chronological train and test partitions must each contain at least two signal classes.")
+    cv = TimeSeriesSplit(n_splits=5)
 
     candidates = {
         "ExtraTrees": ExtraTreesClassifier(
@@ -93,7 +96,8 @@ def main():
     }
 
     print(f"Valid rows: {len(X)} | train: {len(X_train)} | holdout: {len(X_test)}")
-    print("Holdout split: 80% train / 20% test; candidate selection uses training-only 5-fold CV.")
+    print("Holdout split: first 80% of time for training / final 20% for testing.")
+    print("Candidate selection uses training-only expanding-window TimeSeriesSplit CV.")
 
     majority = DummyClassifier(strategy="most_frequent")
     majority.fit(X_train, y_train)
@@ -141,7 +145,8 @@ def main():
         "signal_class_distribution": {SIGNAL_NAMES[int(label)]: int(count) for label, count in y.value_counts().sort_index().items()},
         "train_samples": int(len(X_train)),
         "test_samples": int(len(X_test)),
-        "split": "stratified 80/20, random_state=42",
+        "split": "chronological first 80% for training, final 20% for held-out testing",
+        "cross_validation_method": "training-only expanding-window TimeSeriesSplit (5 folds)",
         "majority_baseline_accuracy": round(float(majority_accuracy), 4),
         "previous_model_holdout_accuracy": None if previous_accuracy is None else round(float(previous_accuracy), 4),
         "best_candidate_by_training_cv": best_name,
