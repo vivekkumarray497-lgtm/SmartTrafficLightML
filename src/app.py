@@ -1,5 +1,6 @@
 from flask import Flask, render_template, Response, request, jsonify
 import base64
+import json
 import joblib
 import os
 import sys
@@ -18,6 +19,7 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 MODEL_PATH = os.path.join(BASE_DIR, "model", "random_forest_model.pkl")
 YOLO_MODEL_PATH = os.path.join(BASE_DIR, "yolo11n.pt")
 HISTORY_PATH = os.path.join(BASE_DIR, "data", "traffic_history.csv")
+POLICY_REPORT_PATH = os.path.join(BASE_DIR, "reports", "traffic_policy_evaluation.json")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
