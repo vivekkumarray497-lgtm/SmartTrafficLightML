@@ -126,7 +126,7 @@ function render(s) {
 
   const sig = document.getElementById('signal');
   sig.textContent = (s.signal === 'Green' ? '🟢 ' : s.signal === 'Yellow' ? '🟡 ' : '🔴 ') + s.signal;
-  sig.className = 'signal ' + s.signal.toLowerCase();
+  sig.className = 'signal ' + (s.signal === 'All Red' ? 'red' : s.signal.toLowerCase());
 
   document.getElementById('message').textContent = s.signal_message;
   document.getElementById('signalCountdown').textContent = s.countdown ?? 0;
@@ -142,14 +142,17 @@ function render(s) {
   const hasEmergencyCandidate = Boolean(s.emergency_candidate_type);
   const candidateName = String(s.emergency_candidate_type || '').toLowerCase().includes('fire') ? 'FIRE TRUCK' : 'AMBULANCE';
   const confirmedName = String(s.emergency_type || '').toLowerCase().includes('fire') ? 'FIRE TRUCK' : 'AMBULANCE';
+  const priorityActive = Boolean(s.emergency_priority_active);
   em.textContent = s.emergency
-    ? ('🚨 ' + confirmedName + ' DETECTED — AUTOMATIC PRIORITY ACTIVE')
+    ? (priorityActive
+        ? ('🚨 ' + confirmedName + ' DETECTED — AUTOMATIC PRIORITY ACTIVE')
+        : ('🚨 ' + confirmedName + ' DETECTED — SIGNAL CLEARANCE IN PROGRESS'))
     : (hasEmergencyCandidate
         ? ('🟠 POSSIBLE ' + candidateName + (s.emergency_status === 'low_confidence'
             ? ' — LOW CONFIDENCE'
             : ' — CONFIRMING ACROSS FRAMES'))
         : '🟢 Monitoring for Ambulance / Fire Truck');
-  em.className = 'emergency ' + (s.emergency ? 'priority' : (hasEmergencyCandidate ? 'candidate' : ''));
+  em.className = 'emergency ' + (priorityActive ? 'priority' : (s.emergency || hasEmergencyCandidate ? 'candidate' : ''));
   document.getElementById('emergencyType').textContent = s.emergency_type
     || (hasEmergencyCandidate ? 'Possible ' + (String(s.emergency_candidate_type).toLowerCase().includes('fire') ? 'Fire Truck' : 'Ambulance') : 'None');
   document.getElementById('emergencyDirection').textContent = s.emergency_direction
@@ -159,7 +162,9 @@ function render(s) {
     : (hasEmergencyCandidate ? s.emergency_candidate_confidence : 0);
   document.getElementById('emergencyConfidence').textContent = (Number(emergencyScore || 0) * 100).toFixed(1) + '%';
   document.getElementById('emergencyStatus').textContent = s.emergency
-    ? 'Confirmed across recent frames above the ' + ((s.emergency_priority_min_confidence || 0.35) * 100).toFixed(0) + '% priority threshold. Signal priority is active.'
+    ? (priorityActive
+        ? 'Confirmed across recent frames and safety clearance completed. Emergency GREEN is active.'
+        : 'Emergency confirmed. The current direction is completing Yellow and All-Red clearance before emergency GREEN.')
     : (hasEmergencyCandidate
         ? (s.emergency_status === 'low_confidence'
             ? 'Weak candidate: below the ' + ((s.emergency_priority_min_confidence || 0.35) * 100).toFixed(0) + '% minimum. It will NOT activate emergency GREEN.'
@@ -178,7 +183,7 @@ function render(s) {
     div.innerHTML =
       '<b>' + d + '</b><br>' + n + ' vehicles' +
       '<div class="bar"><span style="width:' + Math.min(100, n / max * 100) + '%"></span></div>' +
-      (d === s.active_direction ? '<small>' + (s.signal === 'Yellow' ? 'YELLOW' : 'GREEN') + '</small>' : '<small>RED</small>');
+      (d === s.active_direction ? '<small>' + (s.signal === 'Yellow' ? 'YELLOW' : s.signal === 'All Red' ? 'ALL RED' : 'GREEN') + '</small>' : '<small>RED</small>');
     box.appendChild(div);
   }
 }
