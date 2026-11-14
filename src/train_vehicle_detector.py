@@ -141,6 +141,8 @@ def prepare_four_class_dataset(dataset_location, source_config):
             else:
                 output_images.unlink()
         output_images.symlink_to(source_images, target_is_directory=True)
+        if output_labels.exists():
+            shutil.rmtree(output_labels)
         output_labels.mkdir(parents=True, exist_ok=True)
 
         label_files = list(source_labels.glob("*.txt"))
