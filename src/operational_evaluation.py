@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import os
 import threading
 from datetime import datetime, timezone
@@ -7,6 +8,10 @@ from datetime import datetime, timezone
 
 class DuplicateSceneError(ValueError):
     """Raised when a camera frame has already been used for validation."""
+
+
+class SampleIntervalError(ValueError):
+    """Raised when validation frames are submitted too close together."""
 
 
 class OperationalEvaluator:
@@ -18,10 +23,19 @@ class OperationalEvaluator:
         "signal": {"Red", "Yellow", "Green", "All Red"},
     }
 
-    def __init__(self, csv_path, report_path, minimum_samples=50):
+    def __init__(
+        self,
+        csv_path,
+        report_path,
+        minimum_samples=50,
+        minimum_sample_interval_seconds=5.0,
+    ):
         self.csv_path = csv_path
         self.report_path = report_path
         self.minimum_samples = max(1, int(minimum_samples))
+        self.minimum_sample_interval_seconds = max(
+            0.0, float(minimum_sample_interval_seconds)
+        )
         self.lock = threading.Lock()
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
@@ -73,8 +87,9 @@ class OperationalEvaluator:
         if not scene_id:
             raise ValueError("A unique camera frame ID is required for validation.")
 
+        now = datetime.now(timezone.utc)
         row = {
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "timestamp": now.isoformat(timespec="seconds"),
             "scene_id": scene_id,
         }
         matches = []
@@ -93,6 +108,35 @@ class OperationalEvaluator:
                 raise DuplicateSceneError(
                     "This exact camera frame has already been submitted. Capture a new scene."
                 )
+
+            if self.minimum_sample_interval_seconds > 0:
+                previous_times = []
+                for existing in existing_rows:
+                    if not str(existing.get("scene_id", "")).strip():
+                        continue
+                    raw_timestamp = str(existing.get("timestamp", "")).strip()
+                    if not raw_timestamp:
+                        continue
+                    try:
+                        previous = datetime.fromisoformat(
+                            raw_timestamp.replace("Z", "+00:00")
+                        )
+                        if previous.tzinfo is None:
+                            previous = previous.replace(tzinfo=timezone.utc)
+                        previous_times.append(previous.astimezone(timezone.utc))
+                    except ValueError:
+                        continue
+
+                if previous_times:
+                    elapsed = (now - max(previous_times)).total_seconds()
+                    if elapsed < self.minimum_sample_interval_seconds:
+                        remaining = math.ceil(
+                            self.minimum_sample_interval_seconds - elapsed
+                        )
+                        raise SampleIntervalError(
+                            f"Wait at least {remaining} more second(s) before "
+                            "submitting another validation scene."
+                        )
 
             with open(self.csv_path, "a", newline="", encoding="utf-8") as handle:
                 csv.DictWriter(handle, fieldnames=self._columns()).writerow(row)
@@ -167,6 +211,7 @@ class OperationalEvaluator:
         result["limitations"] = [
             "Ground truth is manually entered by a reviewer who independently checks the scene.",
             "Each unique captured camera frame can be submitted only once.",
+            f"Validation samples are separated by at least {self.minimum_sample_interval_seconds:g} seconds.",
             "Overall accuracy is strict exact match across density, priority direction, emergency class and signal phase.",
             "The result applies only to the labelled validation samples and conditions represented.",
             "Collect diverse scenes; avoid near-identical consecutive frames.",

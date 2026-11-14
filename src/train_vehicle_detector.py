@@ -33,6 +33,8 @@ VERSION = 1
 IMAGE_SIZE = int(os.environ.get("TRAFFIC_TRAIN_IMAGE_SIZE", "960"))
 EPOCHS = int(os.environ.get("TRAFFIC_TRAIN_EPOCHS", "100"))
 MIN_MAP50 = float(os.environ.get("TRAFFIC_MIN_MAP50", "0.80"))
+MIN_CLASS_MAP50 = float(os.environ.get("TRAFFIC_MIN_CLASS_MAP50", "0.65"))
+MIN_CLASS_RECALL = float(os.environ.get("TRAFFIC_MIN_CLASS_RECALL", "0.55"))
 TARGET_NAMES = ["car", "bike", "bus", "truck", "auto_rickshaw"]
 NORMALIZED_LABELS = {
     "car": 0,
@@ -244,7 +246,7 @@ def main():
     print(f"Dataset: {WORKSPACE}/{PROJECT}/{VERSION}")
     print(f"Source classes: {source_names}")
     print(f"Mapped labels: {class_map}")
-    print(f"Four-class object counts: {object_counts}")
+    print(f"Vehicle-class object counts: {object_counts}")
     print(f"Training on {'GPU' if use_gpu else 'CPU'} for {EPOCHS} epochs at {IMAGE_SIZE}px")
 
     model = YOLO(str(BASE_WEIGHTS))
@@ -304,10 +306,18 @@ def main():
         }
 
     all_target_classes_tested = set(per_class) == set(TARGET_NAMES)
+    class_thresholds_pass = all_target_classes_tested and all(
+        per_class[name].get("map50") is not None
+        and per_class[name]["map50"] >= MIN_CLASS_MAP50
+        and per_class[name].get("recall") is not None
+        and per_class[name]["recall"] >= MIN_CLASS_RECALL
+        for name in TARGET_NAMES
+    )
     promoted = (
         map50 is not None
         and map50 >= MIN_MAP50
         and all_target_classes_tested
+        and class_thresholds_pass
     )
     if promoted:
         OUTPUT_WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
@@ -339,6 +349,11 @@ def main():
             "per_class": per_class,
         },
         "promotion_threshold_map50": MIN_MAP50,
+        "promotion_thresholds_per_class": {
+            "map50_minimum": MIN_CLASS_MAP50,
+            "recall_minimum": MIN_CLASS_RECALL,
+        },
+        "class_thresholds_pass": class_thresholds_pass,
         "promoted_to_application": promoted,
         "trained_weights": str(best_weights),
         "application_weights": str(OUTPUT_WEIGHTS) if promoted else None,
@@ -350,7 +365,8 @@ def main():
     if not promoted:
         raise SystemExit(
             f"Model NOT promoted: held-out mAP@50={map50}; required minimum={MIN_MAP50}; "
-            f"all target classes tested={all_target_classes_tested}. "
+            f"all target classes tested={all_target_classes_tested}; "
+            f"per-class thresholds passed={class_thresholds_pass}. "
             "Collect representative labelled images for every class, then retrain."
         )
 

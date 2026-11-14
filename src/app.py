@@ -99,7 +99,7 @@ from vision_engine import VisionEngine
 from adaptive_controller import AdaptiveController
 from analytics_store import AnalyticsStore
 from emergency_detector import EmergencyDetector
-from operational_evaluation import OperationalEvaluator, DuplicateSceneError
+from operational_evaluation import OperationalEvaluator, DuplicateSceneError, SampleIntervalError
 from camera_config import CAMERAS, ACTIVE_CAMERA_ID
 
 model = joblib.load(MODEL_PATH)
@@ -135,6 +135,7 @@ signal_started_at = time.time()
 signal_duration = 15
 last_signal_key = None
 current_direction = "North"
+current_green_is_emergency = False
 signal_phase = "All Red"
 pending_direction = None
 pending_is_emergency = False
@@ -269,7 +270,7 @@ def get_camera():
 def update_state(metrics):
     global signal_started_at, signal_duration, last_signal_key
     global current_direction, signal_phase, pending_direction, phase_started_at
-    global pending_is_emergency
+    global pending_is_emergency, current_green_is_emergency
 
     adaptive = controller.decide(
         metrics["directions"], metrics["pedestrians"], metrics["emergency"],
@@ -285,12 +286,27 @@ def update_state(metrics):
     )
     emergency_priority_active = False
 
+    # Release the emergency extension as soon as the detector no longer confirms
+    # an emergency vehicle; do not leave a normal approach on a 60-second green.
+    if not emergency_target and current_green_is_emergency:
+        current_green_is_emergency = False
+        if signal_phase == "Green" and current_direction in DIRECTIONS:
+            signal_started_at = now
+            signal_duration = (
+                0 if control_mode == "Manual"
+                else max(15, int(adaptive[current_direction]["green_time"]))
+            )
+
     if emergency_target:
         if (
             current_direction == emergency_target
             and signal_phase == "Green"
             and pending_direction is None
         ):
+            if not current_green_is_emergency:
+                signal_started_at = now
+            current_green_is_emergency = True
+            signal_duration = 60
             emergency_priority_active = True
         else:
             if (
@@ -313,6 +329,7 @@ def update_state(metrics):
                 signal_phase = "Green"
                 signal_started_at = now
                 signal_duration = 60
+                current_green_is_emergency = True
 
         emergency_priority_active = (
             current_direction == emergency_target
@@ -344,6 +361,7 @@ def update_state(metrics):
                 signal_phase = "Green"
                 signal_started_at = now
                 signal_duration = 0
+                current_green_is_emergency = False
 
     else:
         target = adaptive["active_direction"]
@@ -369,6 +387,7 @@ def update_state(metrics):
                 signal_phase = "Green"
                 signal_started_at = now
                 signal_duration = max(15, int(adaptive[current_direction]["green_time"]))
+                current_green_is_emergency = False
         elif now - signal_started_at >= max(1, signal_duration):
             if target != current_direction:
                 pending_direction = target
@@ -505,7 +524,7 @@ def detect_frame(frame, camera_direction=None):
 def reset_state():
     global signal_started_at, signal_duration, last_signal_key
     global current_direction, signal_phase, pending_direction, phase_started_at
-    global pending_is_emergency
+    global pending_is_emergency, current_green_is_emergency
 
     now = time.time()
     reset_direction = (
@@ -516,6 +535,7 @@ def reset_state():
     signal_phase = "All Red"
     pending_direction = None
     pending_is_emergency = False
+    current_green_is_emergency = False
     signal_started_at = now
     phase_started_at = now
     signal_duration = 0
@@ -678,6 +698,8 @@ def api_validation_sample():
         })
     except DuplicateSceneError as exc:
         return jsonify({"error": str(exc)}), 409
+    except SampleIntervalError as exc:
+        return jsonify({"error": str(exc)}), 429
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except OSError as exc:
@@ -706,6 +728,8 @@ def api_health():
         "person_detector_path": os.path.basename(DEFAULT_YOLO_MODEL_PATH) if person_model is not None else "shared_vehicle_model",
         "vehicle_detection_confidence_threshold": vision.confidence_threshold,
         "vehicle_detection_image_size": vision.image_size,
+        "queue_roi_normalized": list(vision.queue_roi),
+        "stopped_speed_threshold_px_per_second": vision.stopped_speed_threshold,
         "emergency_detector": emergency_detector.available,
         "emergency_detector_loaded": emergency_model_loaded,
         "emergency_detector_status": emergency_model_status,

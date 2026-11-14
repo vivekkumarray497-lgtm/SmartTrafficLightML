@@ -7,11 +7,11 @@ from src.vision_engine import VisionEngine
 
 
 class FakeBox:
-    def __init__(self, class_id, confidence, coordinates):
+    def __init__(self, class_id, confidence, coordinates, track_id=None):
         self.cls = [class_id]
         self.conf = [confidence]
         self.xyxy = [coordinates]
-        self.id = None
+        self.id = None if track_id is None else [track_id]
 
 
 class FakeResult:
@@ -142,6 +142,46 @@ class VisionEngineTests(unittest.TestCase):
         self.assertEqual(metrics["vehicle_confidence"], 91.0)
         self.assertEqual(metrics["pedestrian_confidence"], 93.0)
         self.assertEqual(model.kwargs["classes"], [0, 1, 2, 3, 4])
+
+    def test_untracked_detections_do_not_create_fake_speed_or_waiting_time(self):
+        model = FakeModel([
+            FakeBox(2, 0.90, [100, 100, 220, 220]),
+        ])
+        engine = VisionEngine(model)
+        first, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+        second, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertEqual(first["avg_speed"], 0.0)
+        self.assertEqual(second["avg_speed"], 0.0)
+        self.assertEqual(second["avg_waiting_time"], 0.0)
+        self.assertFalse(engine.history)
+
+    def test_queue_length_uses_configurable_normalized_roi(self):
+        model = FakeModel([
+            FakeBox(2, 0.90, [100, 240, 200, 340]),
+            FakeBox(2, 0.88, [10, 10, 90, 90]),
+        ])
+        with patch.dict("os.environ", {"TRAFFIC_QUEUE_ROI": "0.20,0.60,0.80,1.0"}):
+            engine = VisionEngine(model)
+            metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertEqual(metrics["queue_length"], 1)
+        self.assertEqual(metrics["queue_roi"], [0.2, 0.6, 0.8, 1.0])
+
+    def test_invalid_queue_roi_uses_safe_default(self):
+        with patch.dict("os.environ", {"TRAFFIC_QUEUE_ROI": "0.9,0.8,0.2,1.2"}):
+            engine = VisionEngine(FakeModel([]))
+        self.assertEqual(engine.queue_roi, (0.0, 0.60, 1.0, 1.0))
+
+    def test_reset_tracking_clears_track_history(self):
+        engine = VisionEngine(FakeModel([
+            FakeBox(2, 0.90, [100, 100, 220, 220], track_id=7),
+        ]))
+        engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+        self.assertIn(7, engine.history)
+        engine.reset_tracking()
+        self.assertFalse(engine.history)
+        self.assertFalse(engine.last_seen)
 
     def test_invalid_environment_settings_fall_back_safely(self):
         with patch.dict("os.environ", {

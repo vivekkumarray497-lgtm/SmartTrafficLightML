@@ -209,6 +209,18 @@ jobs:
           assert app.traffic_data["active_direction"] == "East", app.traffic_data
           assert app.traffic_data["emergency_priority_active"] is True, app.traffic_data
 
+          normal_after_emergency = dict(
+              phase_metrics,
+              emergency=False,
+              emergency_type="",
+              emergency_direction="",
+          )
+          with patch("app.time.time", return_value=2005.0):
+              app.update_state(normal_after_emergency)
+          assert app.traffic_data["signal"] == "Green", app.traffic_data
+          assert app.current_green_is_emergency is False
+          assert app.signal_duration == 30, app.signal_duration
+
           print("Emergency label, pedestrian, vehicle mapping and signal-clearance regression checks: PASS")
           print("Runtime smoke test: PASS")
           print("Health:", health_data)

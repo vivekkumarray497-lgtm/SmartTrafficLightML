@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from src.operational_evaluation import OperationalEvaluator
+from src.operational_evaluation import OperationalEvaluator, SampleIntervalError
 
 
 class OperationalEvaluatorTests(unittest.TestCase):
@@ -12,6 +12,7 @@ class OperationalEvaluatorTests(unittest.TestCase):
             os.path.join(self.temp_dir.name, "validation.csv"),
             os.path.join(self.temp_dir.name, "report.json"),
             minimum_samples=3,
+            minimum_sample_interval_seconds=0,
         )
         self.prediction = {
             "density": "MEDIUM",
@@ -63,6 +64,17 @@ class OperationalEvaluatorTests(unittest.TestCase):
     def test_frame_id_is_required(self):
         with self.assertRaises(ValueError):
             self.evaluator.record(self.prediction, self.actual, "")
+
+    def test_new_scene_must_wait_for_minimum_validation_interval(self):
+        evaluator = OperationalEvaluator(
+            os.path.join(self.temp_dir.name, "interval.csv"),
+            os.path.join(self.temp_dir.name, "interval-report.json"),
+            minimum_samples=2,
+            minimum_sample_interval_seconds=5,
+        )
+        evaluator.record(self.prediction, self.actual, "session:frame-1")
+        with self.assertRaises(SampleIntervalError):
+            evaluator.record(self.prediction, self.actual, "session:frame-2")
 
     def test_emergency_accuracy_requires_positive_and_negative_examples(self):
         for index in range(3):

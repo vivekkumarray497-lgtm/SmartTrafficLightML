@@ -27,8 +27,23 @@ class VisionEngine:
         except ValueError:
             self.image_size = 960
         self.image_size = min(1280, max(640, self.image_size))
+        self.queue_roi = self._read_queue_roi()
+        try:
+            self.stopped_speed_threshold = float(
+                os.environ.get("TRAFFIC_STOPPED_SPEED_PX", "5.0")
+            )
+        except ValueError:
+            self.stopped_speed_threshold = 5.0
+        self.stopped_speed_threshold = max(0.5, min(50.0, self.stopped_speed_threshold))
+        try:
+            self.track_ttl_seconds = float(os.environ.get("TRAFFIC_TRACK_TTL", "45"))
+        except ValueError:
+            self.track_ttl_seconds = 45.0
+        self.track_ttl_seconds = max(5.0, self.track_ttl_seconds)
+        self.frame_count = 0
         self.history = defaultdict(lambda: deque(maxlen=20))
         self.first_seen = {}
+        self.last_seen = {}
         self.stationary_since = {}
 
     @classmethod
@@ -76,6 +91,48 @@ class VisionEngine:
         if not vehicle_classes:
             return dict(cls.VEHICLES), {0}
         return vehicle_classes, person_classes
+
+    @staticmethod
+    def _read_queue_roi():
+        raw = os.environ.get("TRAFFIC_QUEUE_ROI", "0.0,0.60,1.0,1.0")
+        try:
+            values = tuple(float(part.strip()) for part in raw.split(","))
+        except (TypeError, ValueError):
+            return (0.0, 0.60, 1.0, 1.0)
+        if (
+            len(values) != 4
+            or not (0.0 <= values[0] < values[2] <= 1.0)
+            or not (0.0 <= values[1] < values[3] <= 1.0)
+        ):
+            return (0.0, 0.60, 1.0, 1.0)
+        return values
+
+    def reset_tracking(self):
+        self.history.clear()
+        self.first_seen.clear()
+        self.last_seen.clear()
+        self.stationary_since.clear()
+        predictor = getattr(self.model, "predictor", None)
+        trackers = getattr(predictor, "trackers", None)
+        if isinstance(trackers, (list, tuple)):
+            for tracker in trackers:
+                reset = getattr(tracker, "reset", None)
+                if callable(reset):
+                    reset()
+
+    def _cleanup_stale_tracks(self, now):
+        self.frame_count += 1
+        if self.frame_count % 100:
+            return
+        stale_ids = [
+            track_id for track_id, last_seen in self.last_seen.items()
+            if now - last_seen > self.track_ttl_seconds
+        ]
+        for track_id in stale_ids:
+            self.last_seen.pop(track_id, None)
+            self.history.pop(track_id, None)
+            self.first_seen.pop(track_id, None)
+            self.stationary_since.pop(track_id, None)
 
     def _direction(self, x, y, w, h):
         dx = x - w / 2
@@ -169,13 +226,16 @@ class VisionEngine:
             else:
                 continue
 
-            tid = (
-                int(box.id[0]) if box.id is not None
-                else (-100000 - index if is_person and self.person_model is not None else index)
-            )
+            track_id = int(box.id[0]) if box.id is not None else None
+            tid = track_id
+            if is_person and track_id is None and self.person_model is not None:
+                tid = -100000 - index
+
             now = time.time()
-            previous = self.history[tid][-1] if self.history[tid] else None
-            self.history[tid].append((now, cx, cy))
+            previous = self.history[tid][-1] if tid is not None and self.history[tid] else None
+            if tid is not None:
+                self.history[tid].append((now, cx, cy))
+                self.last_seen[tid] = now
 
             if previous:
                 dt = now - previous[0]
@@ -185,18 +245,22 @@ class VisionEngine:
 
                     if not is_person and cid in self.vehicle_classes:
                         speeds.append(pixel_speed)
-                    if not is_person and cid in self.vehicle_classes and pixel_speed < 5.0:
+                    if (
+                        not is_person
+                        and cid in self.vehicle_classes
+                        and pixel_speed < self.stopped_speed_threshold
+                    ):
                         self.stationary_since.setdefault(tid, now)
                         stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
                     else:
                         self.stationary_since.pop(tid, None)
 
-            if tid not in self.first_seen:
+            if tid is not None and tid not in self.first_seen:
                 self.first_seen[tid] = now
 
             normal_annotations.append({
                 "box": [x1, y1, x2, y2],
-                "label": f"{name} {conf:.2f} ID:{tid}",
+                "label": f"{name} {conf:.2f}" + (f" ID:{track_id}" if track_id is not None else ""),
                 "color": label_color,
                 "is_vehicle": not is_person and cid in self.vehicle_classes,
             })
@@ -281,9 +345,13 @@ class VisionEngine:
         )
         avg_speed = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
 
+        roi_x1, roi_y1, roi_x2, roi_y2 = self.queue_roi
         queue_length = sum(
             1 for item in traffic_boxes
-            if (item["box"][1] + item["box"][3]) / 2 >= h * 0.60
+            if (
+                roi_x1 * w <= (item["box"][0] + item["box"][2]) / 2 <= roi_x2 * w
+                and roi_y1 * h <= (item["box"][1] + item["box"][3]) / 2 <= roi_y2 * h
+            )
         )
         avg_waiting_time = round(sum(stopped_waits) / len(stopped_waits), 1) if stopped_waits else 0.0
         metrics = {
@@ -295,6 +363,7 @@ class VisionEngine:
             "avg_speed": avg_speed,
             "density": density_info["density"],
             "queue_length": queue_length,
+            "queue_roi": list(self.queue_roi),
             "avg_waiting_time": avg_waiting_time,
             "emergency": emergency,
             "emergency_type": emergency_type,
@@ -317,4 +386,5 @@ class VisionEngine:
             if vehicle_detection_confidences else None,
             "live_confidence_samples": len(vehicle_detection_confidences),
         }
+        self._cleanup_stale_tracks(time.time())
         return metrics, frame

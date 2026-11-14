@@ -27,6 +27,8 @@ VERSION = 5
 IMAGE_SIZE = 640
 EPOCHS = int(os.environ.get("EMERGENCY_TRAIN_EPOCHS", "100"))
 MIN_MAP50 = float(os.environ.get("EMERGENCY_MIN_MAP50", "0.80"))
+MIN_CLASS_MAP50 = float(os.environ.get("EMERGENCY_MIN_CLASS_MAP50", "0.70"))
+MIN_CLASS_RECALL = float(os.environ.get("EMERGENCY_MIN_CLASS_RECALL", "0.60"))
 
 
 def normalize_name(value):
@@ -57,6 +59,15 @@ def metric_value(value):
         return round(float(value), 4)
     except (TypeError, ValueError):
         return None
+
+
+def canonical_emergency_class(value):
+    name = normalize_name(value)
+    if "ambulance" in name:
+        return "ambulance"
+    if name in {"fire_truck", "firetruck", "fire_engine", "fire_rescue"}:
+        return "fire_truck"
+    return name
 
 
 def main():
@@ -149,11 +160,27 @@ def main():
 
     map50 = metric_value(box.map50)
     required_emergency_classes = {"ambulance", "fire_truck"}
-    tested_emergency_classes = {
-        normalize_name(name) for name in per_class
-    }
+    emergency_class_metrics = {}
+    for name, metrics in per_class.items():
+        canonical_name = canonical_emergency_class(name)
+        if canonical_name in required_emergency_classes:
+            emergency_class_metrics[canonical_name] = metrics
+
+    tested_emergency_classes = set(emergency_class_metrics)
     emergency_classes_tested = required_emergency_classes.issubset(tested_emergency_classes)
-    promoted = map50 is not None and map50 >= MIN_MAP50 and emergency_classes_tested
+    emergency_class_thresholds_pass = emergency_classes_tested and all(
+        emergency_class_metrics[name].get("map50") is not None
+        and emergency_class_metrics[name]["map50"] >= MIN_CLASS_MAP50
+        and emergency_class_metrics[name].get("recall") is not None
+        and emergency_class_metrics[name]["recall"] >= MIN_CLASS_RECALL
+        for name in required_emergency_classes
+    )
+    promoted = (
+        map50 is not None
+        and map50 >= MIN_MAP50
+        and emergency_classes_tested
+        and emergency_class_thresholds_pass
+    )
 
     report = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -167,7 +194,13 @@ def main():
         "image_size": IMAGE_SIZE,
         "test_split": "test",
         "promotion_threshold_map50": MIN_MAP50,
+        "promotion_thresholds_per_emergency_class": {
+            "map50_minimum": MIN_CLASS_MAP50,
+            "recall_minimum": MIN_CLASS_RECALL,
+        },
         "required_emergency_classes_tested": emergency_classes_tested,
+        "emergency_class_metrics": emergency_class_metrics,
+        "emergency_class_thresholds_pass": emergency_class_thresholds_pass,
         "promoted_to_application": promoted,
         "test_metrics": {
             "precision": metric_value(box.mp),
@@ -206,8 +239,10 @@ def main():
         print("Restart Flask to auto-load the custom emergency model.")
     else:
         print(
-            f"Emergency weights NOT promoted. Required mAP@50 >= {MIN_MAP50:.2f} "
-            "and both ambulance/fire-truck classes present in the test metrics."
+            f"Emergency weights NOT promoted. Required overall mAP@50 >= {MIN_MAP50:.2f}, "
+            f"and each emergency class must reach mAP@50 >= {MIN_CLASS_MAP50:.2f} "
+            f"and recall >= {MIN_CLASS_RECALL:.2f}. "
+            "Both ambulance and fire-truck classes must be measured on the held-out test split."
         )
         raise SystemExit(2)
 
