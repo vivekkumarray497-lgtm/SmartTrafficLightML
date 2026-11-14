@@ -1,6 +1,8 @@
-from flask import Flask, render_template, Response, request, jsonify
+from flask import Flask, render_template, Response, request, jsonify, session
 import base64
+import hmac
 import json
+import secrets
 import joblib
 import os
 import sys
@@ -31,7 +33,27 @@ OPERATIONAL_VALIDATION_PATH = os.path.join(BASE_DIR, "data", "operational_valida
 OPERATIONAL_REPORT_PATH = os.path.join(BASE_DIR, "reports", "operational_evaluation.json")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "0").strip().lower() in {"1", "true", "yes"}
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+
+@app.context_processor
+def inject_csrf_token():
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["csrf_token"] = token
+    return {"csrf_token": token}
+
+@app.before_request
+def protect_api_posts_with_csrf():
+    if request.method == "POST" and request.path.startswith("/api/"):
+        expected = session.get("csrf_token", "")
+        supplied = request.headers.get("X-CSRF-Token", "")
+        if not expected or not supplied or not hmac.compare_digest(expected, supplied):
+            return jsonify({"error": "Invalid or missing CSRF token. Refresh the dashboard and try again."}), 403
 
 @app.after_request
 def disable_dashboard_caching(response):
