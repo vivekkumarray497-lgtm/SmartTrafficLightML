@@ -89,6 +89,27 @@ jobs:
           assert reset_state["signal"] == "All Red", reset_state
           assert reset_state["emergency_priority_active"] is False, reset_state
 
+          # Mode selection cannot turn a signal green without a fresh camera frame.
+          manual_mode = client.post(
+              "/api/mode", json={"mode": "Manual"}, headers=control_headers
+          )
+          assert manual_mode.status_code == 200, manual_mode.data.decode()
+          assert client.get("/api/state").get_json()["signal"] == "All Red"
+          manual_without_frame = client.post(
+              "/api/manual-control",
+              json={"direction": "East"},
+              headers=control_headers,
+          )
+          assert manual_without_frame.status_code == 409, manual_without_frame.data.decode()
+          app.control_mode = "Auto"
+
+          emergency_without_frame = client.post(
+              "/api/control",
+              json={"emergency": True, "emergency_type": "ambulance", "emergency_direction": "East"},
+              headers=control_headers,
+          )
+          assert emergency_without_frame.status_code == 409, emergency_without_frame.data.decode()
+
           invalid = client.post(
               "/api/control",
               json={"emergency": True, "emergency_type": "police", "emergency_direction": "North"},
@@ -119,7 +140,10 @@ jobs:
 
           frame = client.post("/api/frame", json={"image": payload}, headers=control_headers)
           assert frame.status_code == 200, frame.data.decode()
-          assert frame.get_json()["traffic"] == 1
+          frame_state = frame.get_json()
+          assert frame_state["traffic"] == 1
+          assert frame_state["frame_id"], frame_state
+          assert frame_state["pedestrian_directions"]["North"] == 0
 
           app.vision.process = original_process
 
