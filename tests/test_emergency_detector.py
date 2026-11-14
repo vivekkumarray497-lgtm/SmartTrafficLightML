@@ -26,6 +26,10 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         detector = EmergencyDetector()
         self.assertAlmostEqual(detector.confidence, 0.12)
         self.assertAlmostEqual(detector.priority_min_confidence, 0.35)
+        self.assertFalse(detector._priority_confident(0.15))
+        self.assertFalse(detector._priority_confident(0.34))
+        self.assertTrue(detector._priority_confident(0.35))
+        self.assertTrue(detector._priority_confident(0.72))
         self.assertEqual(detector.confirmation_window, 4)
         self.assertEqual(detector.consecutive_required, 2)
 
