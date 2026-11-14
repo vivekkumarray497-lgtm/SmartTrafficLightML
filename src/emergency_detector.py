@@ -187,7 +187,7 @@ class EmergencyDetector:
     def detect(self, frame, traffic_boxes=None):
         self._load()
         if not self.available:
-            return self._empty()
+            return self._empty("model_unavailable")
 
         try:
             height, width = frame.shape[:2]
