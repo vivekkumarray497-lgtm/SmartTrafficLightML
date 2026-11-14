@@ -109,7 +109,9 @@ function render(s) {
     ? 'Confirmed across recent camera frames. Emergency signal priority is active.'
     : (hasEmergencyCandidate
         ? 'Possible candidate found. The AI score is shown while the system checks for repeat detections; signal priority is not active yet.'
-        : 'No ambulance or fire-truck candidate found in the latest processed frame.');
+        : (s.emergency_status === 'model_unavailable' || s.emergency_status === 'model_error'
+            ? 'Emergency model is unavailable or reported an inference error. Check the /api/health endpoint.'
+            : 'No ambulance or fire-truck candidate found in the latest processed frame.'));
 
   const box = document.getElementById('directions');
   box.innerHTML = '';
