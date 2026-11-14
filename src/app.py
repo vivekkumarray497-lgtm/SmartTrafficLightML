@@ -298,6 +298,8 @@ def detect_frame(frame, camera_direction=None):
             }
             if metrics.get("emergency"):
                 metrics["emergency_direction"] = camera_direction
+            if metrics.get("emergency_candidate_type"):
+                metrics["emergency_candidate_direction"] = camera_direction
         update_state(metrics)
         return annotated
 
