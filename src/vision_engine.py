@@ -182,7 +182,7 @@ class VisionEngine:
                     pixel_speed = dist / dt
 
                     if not is_person and cid in self.vehicle_classes:
-                        speeds.append(min(pixel_speed * 0.08, 120))
+                        speeds.append(pixel_speed)
                     if not is_person and cid in self.vehicle_classes and pixel_speed < 5.0:
                         self.stationary_since.setdefault(tid, now)
                         stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
