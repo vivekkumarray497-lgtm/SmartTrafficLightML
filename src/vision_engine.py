@@ -132,69 +132,69 @@ class VisionEngine:
 
         for box, cid, is_person, index in detections_to_process:
             conf = float(box.conf[0])
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cx = (x1 + x2) // 2
-                cy = (y1 + y2) // 2
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
 
-                if is_person:
-                    pedestrian_detection_confidences.append(conf)
-                    pedestrians += 1
-                    name = "Person"
-                    label_color = (255, 180, 0)
-                elif cid in self.vehicle_classes:
-                    key = self.vehicle_classes[cid]
-                    vehicle_detection_confidences.append(conf)
-                    class_detection_confidences[key].append(conf)
-                    counts[key] += 1
-                    directions[self._direction(cx, cy, w, h)] += 1
-                    name = {
-                        "cars": "Car", "bikes": "Bike", "buses": "Bus",
-                        "trucks": "Truck", "auto_rickshaws": "Auto-rickshaw",
-                    }[key]
-                    label_color = (0, 255, 0)
-                    canonical_class_id = {
-                        "cars": 2, "bikes": 3, "buses": 5,
-                        "trucks": 7, "auto_rickshaws": 8,
-                    }[key]
-                    traffic_boxes.append({
-                        "class_id": canonical_class_id,
-                        "model_class_id": cid,
-                        "box": [x1, y1, x2, y2],
-                    })
-                else:
-                    continue
-
-                tid = (
-                    int(box.id[0]) if box.id is not None
-                    else (-100000 - index if is_person and self.person_model is not None else index)
-                )
-                now = time.time()
-                previous = self.history[tid][-1] if self.history[tid] else None
-                self.history[tid].append((now, cx, cy))
-
-                if previous:
-                    dt = now - previous[0]
-                    dist = math.hypot(cx - previous[1], cy - previous[2])
-                    if dt > 0.01:
-                        pixel_speed = dist / dt
-
-                        if not is_person and cid in self.vehicle_classes:
-                            speeds.append(min(pixel_speed * 0.08, 120))
-                        if not is_person and cid in self.vehicle_classes and pixel_speed < 5.0:
-                            self.stationary_since.setdefault(tid, now)
-                            stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
-                        else:
-                            self.stationary_since.pop(tid, None)
-
-                if tid not in self.first_seen:
-                    self.first_seen[tid] = now
-
-                normal_annotations.append({
+            if is_person:
+                pedestrian_detection_confidences.append(conf)
+                pedestrians += 1
+                name = "Person"
+                label_color = (255, 180, 0)
+            elif cid in self.vehicle_classes:
+                key = self.vehicle_classes[cid]
+                vehicle_detection_confidences.append(conf)
+                class_detection_confidences[key].append(conf)
+                counts[key] += 1
+                directions[self._direction(cx, cy, w, h)] += 1
+                name = {
+                    "cars": "Car", "bikes": "Bike", "buses": "Bus",
+                    "trucks": "Truck", "auto_rickshaws": "Auto-rickshaw",
+                }[key]
+                label_color = (0, 255, 0)
+                canonical_class_id = {
+                    "cars": 2, "bikes": 3, "buses": 5,
+                    "trucks": 7, "auto_rickshaws": 8,
+                }[key]
+                traffic_boxes.append({
+                    "class_id": canonical_class_id,
+                    "model_class_id": cid,
                     "box": [x1, y1, x2, y2],
-                    "label": f"{name} {conf:.2f} ID:{tid}",
-                    "color": label_color,
-                    "is_vehicle": not is_person and cid in self.vehicle_classes,
                 })
+            else:
+                continue
+
+            tid = (
+                int(box.id[0]) if box.id is not None
+                else (-100000 - index if is_person and self.person_model is not None else index)
+            )
+            now = time.time()
+            previous = self.history[tid][-1] if self.history[tid] else None
+            self.history[tid].append((now, cx, cy))
+
+            if previous:
+                dt = now - previous[0]
+                dist = math.hypot(cx - previous[1], cy - previous[2])
+                if dt > 0.01:
+                    pixel_speed = dist / dt
+
+                    if not is_person and cid in self.vehicle_classes:
+                        speeds.append(min(pixel_speed * 0.08, 120))
+                    if not is_person and cid in self.vehicle_classes and pixel_speed < 5.0:
+                        self.stationary_since.setdefault(tid, now)
+                        stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
+                    else:
+                        self.stationary_since.pop(tid, None)
+
+            if tid not in self.first_seen:
+                self.first_seen[tid] = now
+
+            normal_annotations.append({
+                "box": [x1, y1, x2, y2],
+                "label": f"{name} {conf:.2f} ID:{tid}",
+                "color": label_color,
+                "is_vehicle": not is_person and cid in self.vehicle_classes,
+            })
 
         emergency = False
         emergency_type = ""
