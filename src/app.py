@@ -125,6 +125,7 @@ frame_sequence = 0
 frame_observations = OrderedDict()
 last_browser_frame_at = 0.0
 camera_loss_latched = False
+consecutive_inference_errors = 0
 active_camera_id = ACTIVE_CAMERA_ID
 _initial_camera = next((item for item in CAMERAS if str(item.get("id")) == str(ACTIVE_CAMERA_ID)), None)
 active_camera_direction = (_initial_camera or {}).get("direction", "North")
@@ -556,7 +557,7 @@ def reset_state():
 
 
 def generate_frames():
-    global camera_loss_latched
+    global camera_loss_latched, consecutive_inference_errors
     while True:
         cap = get_camera()
         if cap is None or not cap.isOpened():
@@ -583,7 +584,12 @@ def generate_frames():
         camera_loss_latched = False
         try:
             frame = detect_frame(frame, camera_direction=active_camera_direction)
+            consecutive_inference_errors = 0
         except Exception as exc:
+            consecutive_inference_errors += 1
+            if consecutive_inference_errors >= 2 and not camera_loss_latched:
+                reset_state()
+                camera_loss_latched = True
             cv2.putText(
                 frame, f"Detection error: {str(exc)[:60]}", (15, 35),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2
