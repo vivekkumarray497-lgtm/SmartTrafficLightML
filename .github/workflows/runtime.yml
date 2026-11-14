@@ -70,6 +70,9 @@ jobs:
 
           reset = client.post("/api/camera/reset", headers=csrf_headers)
           assert reset.status_code == 200, reset.data.decode()
+          reset_state = reset.get_json()
+          assert reset_state["signal"] == "All Red", reset_state
+          assert reset_state["emergency_priority_active"] is False, reset_state
 
           invalid = client.post(
               "/api/control",
