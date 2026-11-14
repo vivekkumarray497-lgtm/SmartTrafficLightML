@@ -17,7 +17,13 @@ from ultralytics import YOLO
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 MODEL_PATH = os.path.join(BASE_DIR, "model", "random_forest_model.pkl")
-YOLO_MODEL_PATH = os.path.join(BASE_DIR, "yolo11n.pt")
+DEFAULT_YOLO_MODEL_PATH = os.path.join(BASE_DIR, "yolo11n.pt")
+CUSTOM_VEHICLE_MODEL_PATH = os.path.join(BASE_DIR, "model", "traffic_vehicle_detector.pt")
+YOLO_MODEL_PATH = (
+    CUSTOM_VEHICLE_MODEL_PATH
+    if os.path.isfile(CUSTOM_VEHICLE_MODEL_PATH)
+    else DEFAULT_YOLO_MODEL_PATH
+)
 HISTORY_PATH = os.path.join(BASE_DIR, "data", "traffic_history.csv")
 POLICY_REPORT_PATH = os.path.join(BASE_DIR, "reports", "traffic_policy_evaluation.json")
 OPERATIONAL_VALIDATION_PATH = os.path.join(BASE_DIR, "data", "operational_validation.csv")
@@ -469,6 +475,8 @@ def api_health():
         "browser_camera": True,
         "model": model is not None,
         "vehicle_detector": yolo_model is not None,
+        "vehicle_model_path": os.path.basename(YOLO_MODEL_PATH),
+        "vehicle_model_type": "custom" if YOLO_MODEL_PATH == CUSTOM_VEHICLE_MODEL_PATH else "coco_fallback",
         "vehicle_detection_confidence_threshold": vision.confidence_threshold,
         "vehicle_detection_image_size": vision.image_size,
         "emergency_detector": emergency_detector.available,
