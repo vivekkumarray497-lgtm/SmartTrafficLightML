@@ -241,7 +241,7 @@ async function saveValidationSample() {
   try {
     const response = await fetch('/api/validation/sample', {
       method: 'POST',
-      headers: csrfHeaders({'Content-Type': 'application/json'}),
+      headers: controlHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify(payload)
     });
     const data = await response.json();
@@ -393,7 +393,7 @@ async function sendFrame() {
   try {
     const r = await fetch('/api/frame', {
       method: 'POST',
-      headers: csrfHeaders({'Content-Type': 'application/json'}),
+      headers: controlHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.72), direction: document.getElementById('browserCameraDirection').value})
     });
 
