@@ -39,6 +39,24 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("COOKIE_SECURE", "0").strip().lower() in {"1", "true", "yes"}
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
+CONTROL_API_TOKEN = os.environ.get("TRAFFIC_CONTROL_TOKEN", "").strip()
+if not CONTROL_API_TOKEN:
+    CONTROL_API_TOKEN = secrets.token_urlsafe(24)
+    if os.environ.get("GITHUB_ACTIONS", "").lower() != "true":
+        print(
+            "[security] Dashboard control PIN (keep private): "
+            + CONTROL_API_TOKEN,
+            flush=True,
+        )
+
+CONTROLLED_POST_PATHS = {
+    "/api/mode",
+    "/api/manual-control",
+    "/api/camera/reset",
+    "/api/cameras/select",
+    "/api/control",
+}
+
 @app.context_processor
 def inject_csrf_token():
     token = session.get("csrf_token")
@@ -54,6 +72,15 @@ def protect_api_posts_with_csrf():
         supplied = request.headers.get("X-CSRF-Token", "")
         if not expected or not supplied or not hmac.compare_digest(expected, supplied):
             return jsonify({"error": "Invalid or missing CSRF token. Refresh the dashboard and try again."}), 403
+
+        if request.path in CONTROLLED_POST_PATHS:
+            supplied_control_token = request.headers.get("X-Control-Token", "")
+            if not supplied_control_token or not hmac.compare_digest(
+                CONTROL_API_TOKEN, supplied_control_token
+            ):
+                return jsonify({
+                    "error": "Control PIN required or incorrect. Enter the private dashboard PIN first."
+                }), 403
 
 @app.after_request
 def disable_dashboard_caching(response):
@@ -639,6 +666,7 @@ def api_health():
     )
     return jsonify({
         "status": "ok" if base_models_ready and emergency_model_loaded and not emergency_detector.error else "degraded",
+        "control_auth_required": True,
         "server_camera": server_camera,
         "browser_camera": True,
         "model": model is not None,
