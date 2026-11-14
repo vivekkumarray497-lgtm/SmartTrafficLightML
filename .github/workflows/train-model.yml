@@ -42,5 +42,8 @@ jobs:
           path: |
             reports/model_evaluation.json
             reports/traffic_policy_evaluation.json
+            model/random_forest_model.pkl
+            model/traffic_priority_model.pkl
+            dataset/traffic_priority_training_data.csv
           if-no-files-found: warn
           retention-days: 30
