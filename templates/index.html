@@ -35,7 +35,7 @@
 <p class="muted">Only one server-side source is active at a time. For multiple simultaneous browser cameras, each camera needs its own stream/session and independent tracking state.</p>
 </div>
 <div class="card"><h2>📊 Live Traffic Metrics</h2><div class="stats">
-<div class="stat">Cars<strong id="cars">{{state.cars}}</strong></div><div class="stat">Bikes<strong id="bikes">{{state.bikes}}</strong></div><div class="stat">Buses<strong id="buses">{{state.buses}}</strong></div><div class="stat">Trucks<strong id="trucks">{{state.trucks}}</strong></div>
+<div class="stat">Cars<strong id="cars">{{state.cars}}</strong></div><div class="stat">Bikes<strong id="bikes">{{state.bikes}}</strong></div><div class="stat">Buses<strong id="buses">{{state.buses}}</strong></div><div class="stat">Trucks<strong id="trucks">{{state.trucks}}</strong></div><div class="stat">Auto-rickshaws<strong id="auto_rickshaws">{{state.auto_rickshaws}}</strong></div>
 <div class="stat">Total Vehicles<strong id="traffic">{{state.traffic}}</strong></div><div class="stat">Pedestrians<strong id="pedestrians">{{state.pedestrians}}</strong></div><div class="stat">Relative Motion (est.)<strong id="speed">{{state.speed}}</strong></div><div class="stat">Density<strong id="density">{{state.density}}</strong></div><div class="stat">Queue Estimate<strong id="queue_length">{{state.queue_length}}</strong></div><div class="stat">Avg. Wait (s)<strong id="avg_waiting_time">{{state.avg_waiting_time}}</strong></div>
 </div></div>
 <div class="card"><h2>🧭 Four-Direction Adaptive Control</h2><div class="directions" id="directions"></div><div class="signal-meta"><span>Active direction: <b id="active">{{state.active_direction}}</b></span><span>Green duration: <b id="green_time">{{state.green_time}}</b>s</span><span>Re-evaluation in: <b id="countdown">{{state.countdown}}</b>s</span></div></div>
@@ -108,7 +108,7 @@ function renderOperationalEvaluation(evaluation) {
 }
 
 function render(s) {
-  ['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','queue_length','avg_waiting_time','active','green_time','countdown','updated','ml','mode']
+  ['cars','bikes','buses','trucks','auto_rickshaws','traffic','pedestrians','speed','density','queue_length','avg_waiting_time','active','green_time','countdown','updated','ml','mode']
     .forEach(k => {
       const e = document.getElementById(k);
       if (e && s[k] !== undefined) e.textContent = s[k];
