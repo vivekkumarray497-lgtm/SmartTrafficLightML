@@ -86,13 +86,36 @@ def find_split_path(dataset_location, dataset_config, split):
         raise ValueError(f"Dataset config does not define the {split} split.")
 
     candidate = Path(candidate)
-    if candidate.is_absolute():
+    if candidate.is_absolute() and candidate.is_dir():
         return candidate
-    base = Path(dataset_config.get("path", dataset_location))
-    if not base.is_absolute():
-        base = Path(dataset_location) / base
-    return (base / candidate).resolve()
 
+    dataset_location = Path(dataset_location).resolve()
+    configured_root = Path(dataset_config.get("path", "."))
+    if not configured_root.is_absolute():
+        configured_root = (dataset_location / configured_root).resolve()
+
+    candidates = [
+        (configured_root / candidate).resolve(),
+        (dataset_location / candidate).resolve(),
+        (dataset_location.parent / candidate).resolve(),
+    ]
+    aliases = {"train": ("train",), "val": ("valid", "val"), "test": ("test",)}
+    candidates.extend(
+        (dataset_location / name / "images").resolve()
+        for name in aliases[split]
+    )
+    for path in candidates:
+        if path.is_dir():
+            return path
+
+    for images_dir in dataset_location.rglob("images"):
+        if images_dir.parent.name in aliases[split] and images_dir.is_dir():
+            return images_dir.resolve()
+
+    raise FileNotFoundError(
+        f"Could not locate {split} images. YAML value={candidate}; "
+        f"searched under {dataset_location}"
+    )
 
 def prepare_four_class_dataset(dataset_location, source_config):
     source_names, class_map = resolve_source_class_map(source_config.get("names", {}))
@@ -104,7 +127,7 @@ def prepare_four_class_dataset(dataset_location, source_config):
         source_images = find_split_path(dataset_location, source_config, config_key)
         if not source_images.is_dir():
             raise FileNotFoundError(f"Missing {split} image directory: {source_images}")
-        source_labels = source_images.parent.parent / "labels"
+        source_labels = source_images.parent / "labels"
         if not source_labels.is_dir():
             raise FileNotFoundError(f"Missing {split} labels directory: {source_labels}")
 
@@ -153,9 +176,9 @@ def prepare_four_class_dataset(dataset_location, source_config):
     config_path = DATASET_ROOT / "data.yaml"
     config = {
         "path": str(DATASET_ROOT.resolve()),
-        "train": str(split_dirs["train"].resolve()),
-        "val": str(split_dirs["val"].resolve()),
-        "test": str(split_dirs["test"].resolve()),
+        "train": str(split_dirs["train"].absolute()),
+        "val": str(split_dirs["val"].absolute()),
+        "test": str(split_dirs["test"].absolute()),
         "nc": len(TARGET_NAMES),
         "names": TARGET_NAMES,
     }
