@@ -178,6 +178,9 @@ class EmergencyDetector:
             if item is not None and item[0] == label and item[1] == direction
         ]
 
+    def _priority_confident(self, score):
+        return float(score) >= self.priority_min_confidence
+
     @staticmethod
     def _select_crop_boxes(traffic_boxes, limit):
         valid_boxes = [
@@ -375,13 +378,16 @@ class EmergencyDetector:
                 if item[2] >= self.priority_min_confidence
             ]
             self._streak = len(strong_matching)
-            current_score_is_eligible = (
-                best["confidence"] >= self.priority_min_confidence
-            )
+            current_score_is_eligible = self._priority_confident(best["confidence"])
             confirmed = (
                 current_score_is_eligible
                 and self._streak >= self.consecutive_required
             )
+
+            if not current_score_is_eligible:
+                self._last_type = ""
+                self._last_direction = ""
+                self._last_confidence = 0.0
 
             if confirmed:
                 self._last_type = best["label"]
