@@ -45,6 +45,15 @@ jobs:
           from unittest.mock import patch
 
           client = app.app.test_client()
+          page = client.get("/")
+          assert page.status_code == 200, page.data.decode()
+          with client.session_transaction() as session:
+              csrf_token = session["csrf_token"]
+          csrf_headers = {"X-CSRF-Token": csrf_token}
+
+          # State-changing API requests must reject a missing CSRF token.
+          csrf_rejected = client.post("/api/camera/reset")
+          assert csrf_rejected.status_code == 403, csrf_rejected.data.decode()
 
           health = client.get("/api/health")
           assert health.status_code == 200, health.data.decode()
@@ -59,12 +68,13 @@ jobs:
           state_data = state.get_json()
           assert set(["North", "South", "East", "West"]).issubset(state_data["directions"])
 
-          reset = client.post("/api/camera/reset")
+          reset = client.post("/api/camera/reset", headers=csrf_headers)
           assert reset.status_code == 200, reset.data.decode()
 
           invalid = client.post(
               "/api/control",
               json={"emergency": True, "emergency_type": "police", "emergency_direction": "North"},
+              headers=csrf_headers,
           )
           assert invalid.status_code == 400, invalid.data.decode()
 
@@ -89,7 +99,7 @@ jobs:
           image.save(buf, format="JPEG")
           payload = base64.b64encode(buf.getvalue()).decode("ascii")
 
-          frame = client.post("/api/frame", json={"image": payload})
+          frame = client.post("/api/frame", json={"image": payload}, headers=csrf_headers)
           assert frame.status_code == 200, frame.data.decode()
           assert frame.get_json()["traffic"] == 1
 
