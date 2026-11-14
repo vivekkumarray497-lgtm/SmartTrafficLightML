@@ -3,7 +3,7 @@
 Run from the repository root:
     python src/train_model.py
 
-GitHub Actions also runs this comparison when the script or dataset changes.
+The repository's model-training GitHub Actions workflow is manual-dispatch only and uploads trained model artifacts without pushing model binaries to the branch.
 
 The saved model is replaced only when the selected candidate beats the current
 model on the same holdout split. A high score cannot be guaranteed if the target
