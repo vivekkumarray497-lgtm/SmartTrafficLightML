@@ -124,6 +124,7 @@ frame_session_id = uuid.uuid4().hex
 frame_sequence = 0
 frame_observations = OrderedDict()
 last_browser_frame_at = 0.0
+browser_camera_active = False
 camera_loss_latched = False
 consecutive_inference_errors = 0
 active_camera_id = ACTIVE_CAMERA_ID
@@ -525,8 +526,11 @@ def reset_state():
     global signal_started_at, signal_duration, last_signal_key
     global current_direction, signal_phase, pending_direction, phase_started_at
     global pending_is_emergency, current_green_is_emergency
+    global browser_camera_active
 
     now = time.time()
+    browser_camera_active = False
+    vision.reset_tracking()
     reset_direction = (
         current_direction if current_direction in DIRECTIONS
         else (manual_direction if control_mode == "Manual" else "North")
@@ -577,8 +581,18 @@ def reset_state():
 
 
 def generate_frames():
-    global camera_loss_latched, consecutive_inference_errors
+    global camera_loss_latched, consecutive_inference_errors, browser_camera_active
     while True:
+        if browser_camera_active:
+            browser_recent = time.time() - last_browser_frame_at <= 3.0
+            if browser_recent:
+                time.sleep(0.1)
+                continue
+            browser_camera_active = False
+            if not camera_loss_latched:
+                reset_state()
+                camera_loss_latched = True
+
         cap = get_camera()
         if cap is None or not cap.isOpened():
             with state_lock:
@@ -837,7 +851,7 @@ def api_manual_control():
 
 @app.route("/api/frame", methods=["POST"])
 def api_frame():
-    global last_browser_frame_at, camera_loss_latched
+    global last_browser_frame_at, camera_loss_latched, browser_camera_active
     payload = request.get_json(silent=True) or {}
     image_data = payload.get("image")
 
@@ -855,9 +869,10 @@ def api_frame():
         requested_direction = str(payload.get("direction", active_camera_direction)).title()
         if requested_direction not in DIRECTIONS:
             return jsonify({"error": "Direction must be North, South, East, or West."}), 400
-        annotated = detect_frame(frame, camera_direction=requested_direction)
         last_browser_frame_at = time.time()
+        browser_camera_active = True
         camera_loss_latched = False
+        annotated = detect_frame(frame, camera_direction=requested_direction)
         ok, buffer = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
         if not ok:
             raise RuntimeError("Could not encode processed frame")
