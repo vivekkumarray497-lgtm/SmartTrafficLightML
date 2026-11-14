@@ -142,9 +142,9 @@ class VisionEngine:
                     if dt > 0.01:
                         pixel_speed = dist / dt
 
-                        if cid in self.VEHICLES:
+                        if cid in self.vehicle_classes:
                             speeds.append(min(pixel_speed * 0.08, 120))
-                        if cid in self.VEHICLES and pixel_speed < 5.0:
+                        if cid in self.vehicle_classes and pixel_speed < 5.0:
                             self.stationary_since.setdefault(tid, now)
                             stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
                         else:
@@ -157,7 +157,7 @@ class VisionEngine:
                     "box": [x1, y1, x2, y2],
                     "label": f"{name} {conf:.2f} ID:{tid}",
                     "color": label_color,
-                    "is_vehicle": cid in self.VEHICLES,
+                    "is_vehicle": cid in self.vehicle_classes,
                 })
 
         emergency = False
