@@ -79,8 +79,10 @@ last_signal_key = None
 current_direction = "North"
 signal_phase = "Green"
 pending_direction = None
+pending_is_emergency = False
 phase_started_at = time.time()
 YELLOW_DURATION = 3
+ALL_RED_DURATION = 1
 camera_lock = threading.Lock()
 state_lock = threading.Lock()
 frame_lock = threading.Lock()
@@ -93,7 +95,7 @@ DIRECTIONS = ["North", "South", "East", "West"]
 traffic_data = {
     "cars": 0, "bikes": 0, "trucks": 0, "buses": 0, "auto_rickshaws": 0, "traffic": 0,
     "speed": 0.0, "pedestrians": 0, "density": "NO TRAFFIC",
-    "queue_length": 0, "avg_waiting_time": 0.0, "emergency": False,
+    "queue_length": 0, "avg_waiting_time": 0.0, "emergency": False, "emergency_priority_active": False,
     "emergency_candidate_type": "", "emergency_candidate_direction": "",
     "emergency_candidate_confidence": 0.0, "emergency_status": "no_candidate",
     "directions": {d: 0 for d in DIRECTIONS},
@@ -203,34 +205,81 @@ def get_camera():
 def update_state(metrics):
     global signal_started_at, signal_duration, last_signal_key
     global current_direction, signal_phase, pending_direction, phase_started_at
+    global pending_is_emergency
 
     adaptive = controller.decide(
         metrics["directions"], metrics["pedestrians"], metrics["emergency"],
         metrics.get("emergency_direction")
     )
     now = time.time()
-    emergency_active = (
-        bool(metrics.get("emergency"))
+    emergency_target = (
+        metrics.get("emergency_direction")
+        if bool(metrics.get("emergency"))
         and metrics.get("emergency_direction") in DIRECTIONS
+        else None
     )
+    emergency_priority_active = False
 
-    if emergency_active:
+    if emergency_target:
+        if (
+            current_direction == emergency_target
+            and signal_phase == "Green"
+            and pending_direction is None
+        ):
+            emergency_priority_active = True
+        else:
+            if (
+                pending_direction != emergency_target
+                or not pending_is_emergency
+                or signal_phase not in {"Yellow", "All Red"}
+            ):
+                pending_direction = emergency_target
+                pending_is_emergency = True
+                signal_phase = "Yellow"
+                phase_started_at = now
+                signal_duration = 60
+            elif signal_phase == "Yellow" and now - phase_started_at >= YELLOW_DURATION:
+                signal_phase = "All Red"
+                phase_started_at = now
+            elif signal_phase == "All Red" and now - phase_started_at >= ALL_RED_DURATION:
+                current_direction = emergency_target
+                pending_direction = None
+                pending_is_emergency = False
+                signal_phase = "Green"
+                signal_started_at = now
+                signal_duration = 60
 
-        target = metrics["emergency_direction"]
-        if current_direction != target or signal_phase != "Green":
-            signal_started_at = now
-            phase_started_at = now
-            signal_duration = 60
-        current_direction = target
-        pending_direction = None
-        signal_phase = "Green"
+        emergency_priority_active = (
+            current_direction == emergency_target
+            and signal_phase == "Green"
+            and pending_direction is None
+        )
+
     elif control_mode == "Manual":
-        current_direction = manual_direction
-        pending_direction = None
-        signal_phase = "Green"
-        signal_started_at = now
-        phase_started_at = now
-        signal_duration = 0
+        target = manual_direction
+        if current_direction == target and signal_phase == "Green" and pending_direction is None:
+            pass
+        else:
+            if (
+                pending_direction != target
+                or pending_is_emergency
+                or signal_phase not in {"Yellow", "All Red"}
+            ):
+                pending_direction = target
+                pending_is_emergency = False
+                signal_phase = "Yellow"
+                phase_started_at = now
+            elif signal_phase == "Yellow" and now - phase_started_at >= YELLOW_DURATION:
+                signal_phase = "All Red"
+                phase_started_at = now
+            elif signal_phase == "All Red" and now - phase_started_at >= ALL_RED_DURATION:
+                current_direction = target
+                pending_direction = None
+                pending_is_emergency = False
+                signal_phase = "Green"
+                signal_started_at = now
+                signal_duration = 0
+
     else:
         target = adaptive["active_direction"]
         if current_direction not in DIRECTIONS:
@@ -238,17 +287,27 @@ def update_state(metrics):
             signal_started_at = now
             signal_duration = max(15, int(adaptive[target]["green_time"]))
 
-        if signal_phase == "Yellow":
-            pending_direction = target
-            if now - phase_started_at >= YELLOW_DURATION:
+        if signal_phase in {"Yellow", "All Red"}:
+            if pending_is_emergency:
+                pending_direction = target
+                pending_is_emergency = False
+            elif pending_direction != target:
+                pending_direction = target
+
+            if signal_phase == "Yellow" and now - phase_started_at >= YELLOW_DURATION:
+                signal_phase = "All Red"
+                phase_started_at = now
+            elif signal_phase == "All Red" and now - phase_started_at >= ALL_RED_DURATION:
                 current_direction = pending_direction or target
                 pending_direction = None
+                pending_is_emergency = False
                 signal_phase = "Green"
                 signal_started_at = now
                 signal_duration = max(15, int(adaptive[current_direction]["green_time"]))
         elif now - signal_started_at >= max(1, signal_duration):
             if target != current_direction:
                 pending_direction = target
+                pending_is_emergency = False
                 signal_phase = "Yellow"
                 phase_started_at = now
             else:
@@ -259,20 +318,51 @@ def update_state(metrics):
     active_info = adaptive[active]
     signal = signal_phase
     if control_mode == "Manual":
-        countdown = 0
+        countdown = (
+            max(0, int(YELLOW_DURATION - (now - phase_started_at)))
+            if signal_phase == "Yellow"
+            else (
+                max(0, int(ALL_RED_DURATION - (now - phase_started_at)))
+                if signal_phase == "All Red" else 0
+            )
+        )
     elif signal_phase == "Yellow":
         countdown = max(0, int(YELLOW_DURATION - (now - phase_started_at)))
+    elif signal_phase == "All Red":
+        countdown = max(0, int(ALL_RED_DURATION - (now - phase_started_at)))
     else:
         countdown = max(0, int(signal_duration - (now - signal_started_at)))
+
+    if emergency_target and not emergency_priority_active:
+        clearance_label = "ALL-RED" if signal_phase == "All Red" else "YELLOW"
+        signal_message = (
+            f"EMERGENCY PREEMPTION - {clearance_label} CLEARANCE | "
+            f"{emergency_target} GREEN PENDING"
+        )
+    elif emergency_priority_active:
+        signal_message = (
+            f"EMERGENCY PRIORITY - {metrics.get('emergency_type', 'Emergency').upper()} "
+            f"| {emergency_target} GREEN"
+        )
+    elif control_mode == "Manual":
+        signal_message = (
+            f"MANUAL DEMO MODE - {active} {signal_phase.upper()}"
+        )
+    elif signal_phase == "Yellow":
+        signal_message = f"{active} direction changing - YELLOW clearance"
+    elif signal_phase == "All Red":
+        signal_message = "ALL-RED SAFETY CLEARANCE - next direction pending"
+    else:
+        signal_message = f"{active} direction selected by adaptive traffic priority"
 
     last_signal_key = f"{control_mode}:{active}:{signal_phase}"
 
     with state_lock:
         traffic_data.update({
-            "cars": metrics["cars"],
-            "bikes": metrics["bikes"],
-            "trucks": metrics["trucks"],
-            "buses": metrics["buses"],
+            "cars": metrics.get("cars", 0),
+            "bikes": metrics.get("bikes", 0),
+            "trucks": metrics.get("trucks", 0),
+            "buses": metrics.get("buses", 0),
             "auto_rickshaws": metrics.get("auto_rickshaws", 0),
             "traffic": metrics["total_vehicles"],
             "speed": metrics["avg_speed"],
@@ -281,6 +371,7 @@ def update_state(metrics):
             "queue_length": metrics["queue_length"],
             "avg_waiting_time": metrics["avg_waiting_time"],
             "emergency": bool(metrics.get("emergency")),
+            "emergency_priority_active": emergency_priority_active,
             "emergency_type": metrics.get("emergency_type", ""),
             "emergency_direction": metrics.get("emergency_direction", ""),
             "emergency_confidence": metrics.get("emergency_confidence", 0.0),
@@ -300,14 +391,7 @@ def update_state(metrics):
             "signal": signal,
             "mode": control_mode,
             "countdown": countdown,
-            "signal_message": (
-                f"EMERGENCY PRIORITY - {metrics.get('emergency_type', 'Emergency').upper()} | {active} GREEN"
-                if emergency_active
-                else (f"MANUAL DEMO MODE - {active} GREEN" if control_mode == "Manual"
-                      else (f"{active} direction changing - YELLOW clearance"
-                            if signal_phase == "Yellow"
-                            else f"{active} direction selected by adaptive traffic priority"))
-            ),
+            "signal_message": signal_message,
             "updated_at": datetime.now().strftime("%H:%M:%S")
         })
 
@@ -333,10 +417,12 @@ def reset_state():
     signal_started_at = time.time()
     signal_duration = 15
     last_signal_key = None
+    global pending_is_emergency
     reset_direction = manual_direction if control_mode == "Manual" else "North"
     current_direction = reset_direction
     signal_phase = "Green"
     pending_direction = None
+    pending_is_emergency = False
     phase_started_at = time.time()
     with state_lock:
         traffic_data.update({
@@ -348,6 +434,7 @@ def reset_state():
             "signal": "Green",
             "signal_message": f"{'MANUAL DEMO MODE - ' + reset_direction + ' GREEN' if control_mode == 'Manual' else 'No traffic - GREEN LIGHT'}",
             "emergency": False,
+            "emergency_priority_active": False,
             "emergency_type": "",
             "emergency_direction": "",
             "emergency_confidence": 0.0,
