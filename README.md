@@ -189,11 +189,14 @@ A single camera is assigned to one configured road approach. Selecting "North" d
 
 ## API request protection
 
-All dashboard POST requests under `/api/` require the session CSRF token issued with the dashboard page. Refresh the dashboard if a stale session token is rejected. For an HTTPS deployment, set a persistent secret and secure cookies before starting Flask:
+All dashboard POST requests under `/api/` require the session CSRF token issued with the dashboard page. Control-changing routes (mode, manual direction, emergency reset, camera reset and camera selection) also require a private control PIN. If `TRAFFIC_CONTROL_TOKEN` is not set, Flask generates a random PIN at startup and prints it once in the server console. Enter it in the dashboard's **Dashboard control PIN** field and select **Unlock Controls**. The PIN is not written to GitHub. Refreshing the page clears the PIN from the browser.
+
+For a stable HTTPS deployment, configure a persistent secret and secure cookies before starting Flask:
 
 ```bash
 export FLASK_SECRET_KEY="a-long-random-secret-stored-outside-the-repository"
+export TRAFFIC_CONTROL_TOKEN="a-separate-long-random-control-secret"
 export COOKIE_SECURE=1
 ```
 
-This protects browser sessions against cross-site request forgery. It is **not user authentication or authorization**. Do not expose manual signal/emergency controls as a public service or connect this academic prototype to live road hardware without a separate authenticated control plane, access controls, fail-safe interlocks and qualified safety review.
+The PIN is a shared bearer secret, not individual user accounts, roles, audit identity or a full authentication system. Do not expose control routes publicly or connect this academic prototype to live road hardware without a separately managed authenticated control plane, access controls, fail-safe interlocks and qualified safety review.
