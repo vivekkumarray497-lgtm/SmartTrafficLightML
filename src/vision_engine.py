@@ -90,6 +90,7 @@ class VisionEngine:
         h, w = frame.shape[:2]
         counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0, "auto_rickshaws": 0}
         directions = {d: 0 for d in ["North", "South", "East", "West"]}
+        pedestrian_directions = {d: 0 for d in ["North", "South", "East", "West"]}
         pedestrians = 0
         speeds = []
         stopped_waits = []
@@ -142,6 +143,7 @@ class VisionEngine:
             if is_person:
                 pedestrian_detection_confidences.append(conf)
                 pedestrians += 1
+                pedestrian_directions[self._direction(cx, cy, w, h)] += 1
                 name = "Person"
                 label_color = (255, 180, 0)
             elif cid in self.vehicle_classes:
@@ -289,6 +291,7 @@ class VisionEngine:
             "total_vehicles": total,
             "directions": directions,
             "pedestrians": pedestrians,
+            "pedestrian_directions": pedestrian_directions,
             "avg_speed": avg_speed,
             "density": density_info["density"],
             "queue_length": queue_length,
