@@ -1,4 +1,4 @@
-name: Train and evaluate traffic signal model
+name: Train and evaluate traffic models
 
 on:
   workflow_dispatch:
@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "src/train_model.py"
+      - "src/train_policy_model.py"
       - "dataset/cleaned_traffic_data.csv"
       - ".github/workflows/train-model.yml"
 
@@ -38,15 +39,20 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Train and evaluate models
+      - name: Evaluate legacy signal-label model
         run: python src/train_model.py
+
+      - name: Train traffic-priority policy model
+        run: python src/train_policy_model.py
 
       - name: Save evaluation report as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: traffic-model-evaluation
-          path: reports/model_evaluation.json
+          path: |
+            reports/model_evaluation.json
+            reports/traffic_policy_evaluation.json
           if-no-files-found: warn
           retention-days: 30
 
@@ -54,7 +60,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add model/random_forest_model.pkl reports/model_evaluation.json
+          git add model/random_forest_model.pkl reports/model_evaluation.json model/traffic_priority_model.pkl reports/traffic_policy_evaluation.json dataset/traffic_priority_training_data.csv
           if git diff --cached --quiet; then
             echo "No model or report changes to commit."
           else
