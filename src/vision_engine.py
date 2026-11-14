@@ -100,6 +100,10 @@ class VisionEngine:
         emergency_type = ""
         emergency_direction = ""
         emergency_confidence = 0.0
+        emergency_candidate_type = ""
+        emergency_candidate_direction = ""
+        emergency_candidate_confidence = 0.0
+        emergency_status = "no_candidate"
 
         emergency_detections = []
         if self.emergency_detector is not None:
@@ -111,6 +115,10 @@ class VisionEngine:
             emergency_type = emergency_info["type"]
             emergency_direction = emergency_info["direction"]
             emergency_confidence = emergency_info["confidence"]
+            emergency_candidate_type = emergency_info.get("candidate_type", "")
+            emergency_candidate_direction = emergency_info.get("candidate_direction", "")
+            emergency_candidate_confidence = emergency_info.get("candidate_confidence", 0.0)
+            emergency_status = emergency_info.get("status", "no_candidate")
 
             emergency_detections = emergency_info["detections"]
 
@@ -189,7 +197,20 @@ class VisionEngine:
             "emergency_type": emergency_type,
             "emergency_direction": emergency_direction,
             "emergency_confidence": emergency_confidence,
-            "live_confidence": round(float(np.mean(detection_confidences + ([emergency_confidence] if emergency else []))) * 100, 1) if detection_confidences or emergency else None,
-            "live_confidence_samples": len(detection_confidences) + (1 if emergency else 0),
+            "emergency_candidate_type": emergency_candidate_type,
+            "emergency_candidate_direction": emergency_candidate_direction,
+            "emergency_candidate_confidence": emergency_candidate_confidence,
+            "emergency_status": emergency_status,
+            "live_confidence": round(
+                float(np.mean(
+                    detection_confidences
+                    + ([emergency_confidence] if emergency else [])
+                    + ([emergency_candidate_confidence] if emergency_candidate_type and not emergency else [])
+                )) * 100, 1
+            ) if detection_confidences or emergency or emergency_candidate_type else None,
+            "live_confidence_samples": (
+                len(detection_confidences)
+                + (1 if emergency or emergency_candidate_type else 0)
+            ),
         }
         return metrics, frame
