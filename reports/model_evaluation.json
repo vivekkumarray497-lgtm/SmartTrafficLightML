@@ -1,15 +1,37 @@
 {
-  "generated_at_utc": "2026-10-12T10:35:15Z",
+  "generated_at_utc": "2026-11-14T15:10:02Z",
   "dataset_rows_used": 2000,
+  "signal_class_distribution": {
+    "Red": 683,
+    "Yellow": 708,
+    "Green": 609
+  },
   "train_samples": 1600,
   "test_samples": 400,
   "split": "stratified 80/20, random_state=42",
   "majority_baseline_accuracy": 0.355,
-  "previous_model_holdout_accuracy": 0.045,
+  "previous_model_holdout_accuracy": 0.37,
   "best_candidate_by_training_cv": "GradientBoosting",
+  "selected_estimator": "GradientBoostingClassifier",
+  "feature_importance": {
+    "temperature": 0.170472,
+    "avg_vehicle_speed": 0.144221,
+    "humidity": 0.137541,
+    "vehicle_count_cars": 0.115205,
+    "traffic_volume": 0.109797,
+    "minute": 0.077355,
+    "vehicle_count_bikes": 0.071684,
+    "vehicle_count_trucks": 0.065907,
+    "hour": 0.039176,
+    "weather_condition": 0.02749,
+    "location_id": 0.021262,
+    "day": 0.011227,
+    "accident_reported": 0.008662,
+    "month": 0.0
+  },
   "candidate_holdout_accuracy": 0.37,
   "active_model_holdout_accuracy": 0.37,
-  "promoted_candidate": true,
+  "promoted_candidate": false,
   "cross_validation": {
     "ExtraTrees": {
       "cv_mean_accuracy": 0.3275,
