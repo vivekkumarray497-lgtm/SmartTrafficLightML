@@ -366,9 +366,12 @@ async function stopCamera() {
       throw new Error(resetData.error || 'Server camera reset failed');
     }
     await refresh();
-  } catch (e) {}
-
-  document.getElementById('cameraStatus').textContent = 'Camera stopped.';
+    document.getElementById('cameraStatus').textContent = 'Camera stopped. Signal remains in the All-Red safety hold until a valid frame is processed.';
+  } catch (e) {
+    document.getElementById('cameraStatus').textContent =
+      'Browser camera stopped, but server reset failed: ' + e.message +
+      ' Enter the private control PIN and retry.';
+  }
 }
 
 async function sendFrame() {
