@@ -60,12 +60,12 @@
 <p class="muted" id="emergencyValidationNote">Emergency validation cases: {{state.operational_evaluation.emergency_positive_samples}} positive and {{state.operational_evaluation.emergency_negative_samples}} negative. At least 5 of each are required before showing emergency-class accuracy.</p>
 </div>
 <div class="card"><h2>🧾 Validate This Camera Result</h2>
-<p class="muted">Independently inspect the current camera scene. Select what a human reviewer considers correct, not what the AI currently displays. One sample is one distinct scene—not repeated copies of the same frame.</p>
+<p class="muted">Independently inspect the processed camera frame. Select what a human reviewer considers correct, not what the AI displays. Each unique captured frame can be submitted only once; the saved prediction is tied to that exact frame.</p>
 <div class="row">
 <div><label for="actualDensity">Verified traffic density</label><select id="actualDensity"><option value="">Select actual density</option><option>NO TRAFFIC</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>VERY HIGH</option></select></div>
 <div><label for="actualDirection">Correct priority direction</label><select id="actualDirection"><option value="">Select correct direction</option><option>North</option><option>South</option><option>East</option><option>West</option></select></div>
 <div><label for="actualEmergency">Verified emergency vehicle</label><select id="actualEmergency"><option value="">Select actual class</option><option value="none">None</option><option value="ambulance">Ambulance</option><option value="fire_truck">Fire Truck</option></select></div>
-<div><label for="actualSignal">Correct signal phase</label><select id="actualSignal"><option value="">Select correct signal</option><option>Green</option><option>Yellow</option><option>Red</option></select></div>
+<div><label for="actualSignal">Correct signal phase</label><select id="actualSignal"><option value="">Select correct signal</option><option>Green</option><option>Yellow</option><option>Red</option><option>All Red</option></select></div>
 </div>
 <button type="button" id="saveValidationSampleBtn" onclick="saveValidationSample()">Save Human-Verified Sample</button>
 <p class="muted" id="validationSaveStatus">Start the camera in Auto mode before saving a validation sample.</p>
@@ -84,6 +84,7 @@ let emergency = false;
 let cameraStream = null;
 let captureTimer = null;
 let processing = false;
+let latestSceneId = '';
 
 function renderOperationalEvaluation(evaluation) {
   if (!evaluation) return;
@@ -108,6 +109,7 @@ function renderOperationalEvaluation(evaluation) {
 }
 
 function render(s) {
+  latestSceneId = String(s.frame_id || '');
   ['cars','bikes','buses','trucks','auto_rickshaws','traffic','pedestrians','speed','density','queue_length','avg_waiting_time','active','green_time','countdown','updated','ml','mode']
     .forEach(k => {
       const e = document.getElementById(k);
@@ -201,8 +203,13 @@ async function saveValidationSample() {
     density: document.getElementById('actualDensity').value,
     direction: document.getElementById('actualDirection').value,
     emergency_type: document.getElementById('actualEmergency').value,
-    signal: document.getElementById('actualSignal').value
+    signal: document.getElementById('actualSignal').value,
+    scene_id: latestSceneId
   };
+  if (!payload.scene_id) {
+    status.textContent = 'No current processed camera frame is available. Start the camera first.';
+    return;
+  }
   if (Object.values(payload).some(value => !value)) {
     status.textContent = 'Please select all four independently verified values.';
     return;
