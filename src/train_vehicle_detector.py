@@ -1,8 +1,8 @@
-"""Fine-tune YOLO11n for car, bike, bus and truck detection.
+"""Fine-tune YOLO11n for cars, two-wheelers, buses, trucks and auto-rickshaws.
 
 Dataset: Vehicle detection by Shubhams Workspace, Roboflow Universe.
 Dataset release: vehicle-detection-eckrb-cppsf/1, CC BY 4.0.
-The source labels are consolidated into four project categories. Ambulance and
+The source labels are consolidated into five project categories. Ambulance and
 other out-of-scope labels are left to the dedicated emergency detector or ignored.
 
 Set ROBOFLOW_API_KEY in the environment before running this script.
@@ -25,7 +25,7 @@ BASE_WEIGHTS = ROOT / "yolo11n.pt"
 OUTPUT_WEIGHTS = ROOT / "model" / "traffic_vehicle_detector.pt"
 REPORT_PATH = ROOT / "reports" / "traffic_vehicle_detector_evaluation.json"
 RUNS_DIR = ROOT / "runs" / "traffic_vehicle_training"
-DATASET_ROOT = ROOT / "datasets" / "traffic_vehicle_four_class"
+DATASET_ROOT = ROOT / "datasets" / "traffic_vehicle_classes"
 
 WORKSPACE = "shubhams-workspace-wokrm"
 PROJECT = "vehicle-detection-eckrb-cppsf"
@@ -33,7 +33,7 @@ VERSION = 1
 IMAGE_SIZE = int(os.environ.get("TRAFFIC_TRAIN_IMAGE_SIZE", "960"))
 EPOCHS = int(os.environ.get("TRAFFIC_TRAIN_EPOCHS", "100"))
 MIN_MAP50 = float(os.environ.get("TRAFFIC_MIN_MAP50", "0.80"))
-TARGET_NAMES = ["car", "bike", "bus", "truck"]
+TARGET_NAMES = ["car", "bike", "bus", "truck", "auto_rickshaw"]
 NORMALIZED_LABELS = {
     "car": 0,
     "cars": 0,
@@ -48,6 +48,11 @@ NORMALIZED_LABELS = {
     "lorry": 3,
     "mini truck": 3,
     "mini_truck": 3,
+    "auto": 4,
+    "auto rickshaw": 4,
+    "rickshaw": 4,
+    "tuk tuk": 4,
+    "tuktuk": 4,
 }
 
 
