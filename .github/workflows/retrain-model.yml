@@ -1,10 +1,6 @@
 name: Evaluate and improve traffic model
 
 on:
-  push:
-    paths:
-      - "src/train_model.py"
-      - "dataset/cleaned_traffic_data.csv"
   workflow_dispatch:
 
 permissions:
