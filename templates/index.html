@@ -42,7 +42,7 @@
 </div>
 <div>
 <div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><div class="signal-meta"><span>Mode: <b id="signalMode">{{state.mode}}</b></span><span>Re-evaluation: <b id="signalCountdown">{{state.countdown}}</b>s</span></div><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
-<div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted" id="emergencyStatus">No ambulance or fire-truck candidate in the current frame.</p><p class="muted">Candidate confidence is the AI model score, not verified accuracy. GREEN priority activates only after repeated-frame confirmation. Police, buses and ordinary trucks do not trigger emergency priority.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
+<div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Model Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted" id="emergencyStatus">No ambulance or fire-truck candidate in the current frame.</p><p class="muted">Candidate confidence is the AI model score, not verified accuracy. GREEN priority activates only after repeated-frame confirmation. Police, buses and ordinary trucks do not trigger emergency priority.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
 <div class="card"><h2>🤖 Legacy Signal-Label Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Retained for comparison with the original dataset labels. The live controller uses YOLO vehicle counts and the adaptive traffic controller.</p></div>
 <div class="card"><h2>📈 Overall Traffic System Accuracy</h2>
 <div class="stats">
@@ -157,9 +157,11 @@ function render(s) {
     : (hasEmergencyCandidate ? s.emergency_candidate_confidence : 0);
   document.getElementById('emergencyConfidence').textContent = (Number(emergencyScore || 0) * 100).toFixed(1) + '%';
   document.getElementById('emergencyStatus').textContent = s.emergency
-    ? 'Confirmed across recent camera frames. Emergency signal priority is active.'
+    ? 'Confirmed across recent frames above the ' + ((s.emergency_priority_min_confidence || 0.35) * 100).toFixed(0) + '% priority threshold. Signal priority is active.'
     : (hasEmergencyCandidate
-        ? 'Possible candidate found. The AI score is shown while the system checks for repeat detections; signal priority is not active yet.'
+        ? (s.emergency_status === 'low_confidence'
+            ? 'Weak candidate: below the ' + ((s.emergency_priority_min_confidence || 0.35) * 100).toFixed(0) + '% minimum. It will NOT activate emergency GREEN.'
+            : 'Candidate is being checked across frames. Signal priority is not active yet.')
         : (s.emergency_status === 'model_unavailable' || s.emergency_status === 'model_error'
             ? 'Emergency model is unavailable or reported an inference error. Check the /api/health endpoint.'
             : 'No ambulance or fire-truck candidate found in the latest processed frame.'));

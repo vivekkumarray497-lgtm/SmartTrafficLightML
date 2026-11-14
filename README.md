@@ -151,6 +151,16 @@ For the final camera demo, verify the behavior with a clear ambulance clip, a fi
 - [Ultralytics object-detection training guide](https://docs.ultralytics.com/tasks/detect)
 
 
+## Emergency detector training
+
+The current emergency fallback uses YOLO-World, which is a zero-shot open-vocabulary detector. Its confidence score is not a measured accuracy percentage. For a dedicated emergency model, fine-tune the repository's YOLO11n weights using the public Roboflow **Fire Truck & Ambulance Detection** dataset (version 2, 1,043 labelled images, CC BY 4.0). Dataset attribution: **s Workspace**. Dataset page: https://universe.roboflow.com/s-workspace-kc9f0/fire-truck-ambulance-detection
+
+The training script keeps ambulance, fire-truck, police-car, towing-truck and normal-vehicle labels separate; only ambulance and fire-truck are mapped to emergency priority by the application.
+
+In Colab, set a Roboflow API key privately (do not commit it), install `requirements-emergency-training.txt`, and run `python src/train_emergency_detector.py`. The script trains on the dataset train split and evaluates the held-out test split. It saves `model/emergency_vehicle_detector.pt` and `reports/emergency_model_evaluation.json`. The application auto-selects these custom weights on restart when the model file is present.
+
+The detector now requires a model score of at least 35% on the current frame and at least two matching above-threshold detections in the recent-frame window before it can activate emergency GREEN. Lower scores remain visible as weak candidates but cannot activate priority. The threshold is a conservative operating gate, not a claim that the classifier is 35% accurate. Tune it only after reviewing the new model's held-out precision/recall and separate road-camera tests.
+
 ## End-to-end operational accuracy validation
 
 The dashboard's **Overall Traffic System Accuracy** uses human-verified camera samples. It remains unavailable until at least 50 independently reviewed samples have been recorded.

@@ -23,18 +23,39 @@ class EmergencyDetector:
     # same detections and can lower the score for the correct class.
     PROMPT_CLASSES = ["ambulance", "fire truck"]
 
-    def __init__(self, model_path=None, confidence=0.12, consecutive_required=2, miss_tolerance=2):
-        self.model_path = model_path or os.environ.get(
-            "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
+    def __init__(self, model_path=None, confidence=None, consecutive_required=2, miss_tolerance=2):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        default_custom_path = os.path.join(
+            project_root, "model", "emergency_vehicle_detector.pt"
         )
-        # Set EMERGENCY_MODEL_TYPE=custom when EMERGENCY_MODEL_PATH points to
-        # weights trained with ambulance/fire-truck classes. YOLO-World remains
-        # the backwards-compatible default, but is only a zero-shot fallback.
-        self.model_type = os.environ.get("EMERGENCY_MODEL_TYPE", "world").strip().lower()
+        configured_path = model_path or os.environ.get("EMERGENCY_MODEL_PATH")
+        custom_weights_present = os.path.isfile(default_custom_path)
+
+        if configured_path:
+            self.model_path = configured_path
+            default_model_type = "world"
+        elif custom_weights_present:
+            self.model_path = default_custom_path
+            default_model_type = "custom"
+        else:
+            self.model_path = "yolov8s-worldv2.pt"
+            default_model_type = "world"
+
+        self.model_type = os.environ.get(
+            "EMERGENCY_MODEL_TYPE", default_model_type
+        ).strip().lower()
         if self.model_type not in {"world", "custom"}:
             self.model_type = "world"
 
-        self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
+        default_confidence = 0.20 if self.model_type == "custom" else 0.12
+        selected_confidence = default_confidence if confidence is None else confidence
+        self.confidence = float(os.environ.get("EMERGENCY_CONF", selected_confidence))
+        self.priority_min_confidence = float(
+            os.environ.get("EMERGENCY_PRIORITY_MIN_CONF", 0.35)
+        )
+        self.priority_min_confidence = min(
+            0.95, max(0.05, self.priority_min_confidence)
+        )
         self.consecutive_required = max(
             2, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
         )
@@ -258,7 +279,7 @@ class EmergencyDetector:
                     crop = frame[cy1:cy2, cx1:cx2]
                     crop_result = self._predict(
                         crop,
-                        confidence=min(self.confidence, 0.05),
+                        confidence=max(0.08, self.confidence * 0.5),
                         imgsz=1280,
                     )
                     results_to_parse.append((crop_result, cx1, cy1))
@@ -349,13 +370,25 @@ class EmergencyDetector:
                 (best["label"], best["direction"], best["confidence"])
             )
             matching = self._matching_history(best["label"], best["direction"])
-            self._streak = len(matching)
-            confirmed = self._streak >= self.consecutive_required
+            strong_matching = [
+                item for item in matching
+                if item[2] >= self.priority_min_confidence
+            ]
+            self._streak = len(strong_matching)
+            current_score_is_eligible = (
+                best["confidence"] >= self.priority_min_confidence
+            )
+            confirmed = (
+                current_score_is_eligible
+                and self._streak >= self.consecutive_required
+            )
 
             if confirmed:
                 self._last_type = best["label"]
                 self._last_direction = best["direction"]
-                self._last_confidence = sum(item[2] for item in matching) / len(matching)
+                self._last_confidence = (
+                    sum(item[2] for item in strong_matching) / len(strong_matching)
+                )
 
             for candidate in candidates:
                 candidate["confirmed"] = bool(
@@ -371,7 +404,10 @@ class EmergencyDetector:
                 "candidate_type": best["label"],
                 "candidate_direction": best["direction"],
                 "candidate_confidence": best["confidence"],
-                "status": "confirmed" if confirmed else "confirming",
+                "status": (
+                    "confirmed" if confirmed
+                    else ("low_confidence" if not current_score_is_eligible else "confirming")
+                ),
                 "detections": candidates,
             }
 

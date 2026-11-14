@@ -22,11 +22,25 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertNotIn(label, EmergencyDetector.PROMPT_CLASSES)
 
-    def test_default_emergency_confidence_allows_small_vehicle_candidates(self):
+    def test_world_fallback_uses_separate_detection_and_priority_thresholds(self):
         detector = EmergencyDetector()
         self.assertAlmostEqual(detector.confidence, 0.12)
+        self.assertAlmostEqual(detector.priority_min_confidence, 0.35)
         self.assertEqual(detector.confirmation_window, 4)
         self.assertEqual(detector.consecutive_required, 2)
+
+    def test_custom_model_defaults_to_stronger_detection_threshold(self):
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {
+            "EMERGENCY_MODEL_TYPE": "custom",
+            "EMERGENCY_MODEL_PATH": "custom-emergency.pt",
+        }):
+            detector = EmergencyDetector()
+        self.assertEqual(detector.model_type, "custom")
+        self.assertAlmostEqual(detector.confidence, 0.20)
+        self.assertAlmostEqual(detector.priority_min_confidence, 0.35)
 
     def test_only_ambulance_and_fire_vehicle_labels_are_emergency(self):
         self.assertEqual(EmergencyDetector._label("emergency ambulance"), "ambulance")
@@ -109,14 +123,28 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         selected = EmergencyDetector._select_crop_boxes(boxes, 2)
         self.assertEqual([item["class_id"] for item in selected], [5, 7])
 
-    def test_candidate_history_confirms_after_two_hits_even_with_one_missed_frame(self):
+    def test_candidate_history_filters_scores_below_priority_minimum(self):
+        detector = EmergencyDetector()
+        detector._recent_candidates.extend([
+            ("ambulance", "North", 0.15),
+            ("ambulance", "North", 0.22),
+            ("ambulance", "North", 0.48),
+        ])
+        matching = detector._matching_history("ambulance", "North")
+        strong = [item for item in matching if item[2] >= detector.priority_min_confidence]
+        self.assertEqual(len(matching), 3)
+        self.assertEqual(len(strong), 1)
+
+    def test_candidate_history_confirms_after_two_strong_hits_even_with_one_missed_frame(self):
         detector = EmergencyDetector()
         detector._recent_candidates.extend([
             ("ambulance", "North", 0.42),
             None,
             ("ambulance", "North", 0.51),
         ])
-        self.assertEqual(len(detector._matching_history("ambulance", "North")), 2)
+        matching = detector._matching_history("ambulance", "North")
+        strong = [item for item in matching if item[2] >= detector.priority_min_confidence]
+        self.assertEqual(len(strong), 2)
 
     def test_one_candidate_is_not_enough_to_trigger_priority(self):
         detector = EmergencyDetector()

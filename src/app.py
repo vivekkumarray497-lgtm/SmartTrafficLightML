@@ -464,6 +464,7 @@ def api_health():
         "emergency_model_type": emergency_detector.model_type,
         "emergency_model_path": os.path.basename(emergency_detector.model_path),
         "emergency_confidence_threshold": emergency_detector.confidence,
+        "emergency_priority_min_confidence": emergency_detector.priority_min_confidence,
         "emergency_confirmation_hits": emergency_detector.consecutive_required,
         "emergency_confirmation_window": emergency_detector.confirmation_window,
         "emergency_detector_error": emergency_detector.error,
