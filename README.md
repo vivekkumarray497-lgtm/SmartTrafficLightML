@@ -183,13 +183,13 @@ Dataset page: https://universe.roboflow.com/shubhams-workspace-wokrm/vehicle-det
 
 ## Signal transition and camera coverage safeguards
 
-A direction change now follows the demonstration sequence **Yellow (3 seconds) → All Red (1 second) → next Green**. Emergency priority and manual direction changes use the same clearance sequence; the dashboard reports emergency priority as active only after the emergency direction has actually received Green. These timings are project-demo defaults, not a certified traffic-signal controller or an approved road-safety timing plan.
+A direction change now follows the demonstration sequence **Yellow (3 seconds) → All Red (1 second) → next Green**. Emergency priority and manual direction changes use the same clearance sequence; the dashboard reports emergency priority as active only after the emergency direction has actually received Green. App startup and camera reset/disconnect enter an All-Red safe hold. If no valid camera frame arrives for 3 seconds, the server-side feed monitor resets signal state to All Red; browser-camera heartbeats prevent an unavailable server webcam from overriding a working browser feed. Manual and emergency controls are rejected until a fresh camera frame exists. These timings are project-demo defaults, not a certified traffic-signal controller or an approved road-safety timing plan.
 
 A single camera is assigned to one configured road approach. Selecting "North" does not infer the physical direction of each vehicle in the whole junction; all detections from that camera are counted under that configured approach. A real four-way installation needs separate, calibrated camera/ROI coverage for each approach and a dedicated multi-camera tracking design.
 
 ## API request protection
 
-All dashboard POST requests under `/api/` require the session CSRF token issued with the dashboard page. Control-changing routes (mode, manual direction, emergency reset, camera reset and camera selection) also require a private control PIN. If `TRAFFIC_CONTROL_TOKEN` is not set, Flask generates a random PIN at startup and prints it once in the server console. Enter it in the dashboard's **Dashboard control PIN** field and select **Unlock Controls**. The PIN is not written to GitHub. Refreshing the page clears the PIN from the browser.
+All dashboard POST requests under `/api/` require the session CSRF token issued with the dashboard page. Control-changing routes (mode, manual direction, emergency override, camera reset, camera selection, browser-frame processing and validation submissions) also require a private control PIN. If `TRAFFIC_CONTROL_TOKEN` is not set, Flask generates a random PIN at startup and prints it once in the server console. Enter it in the dashboard's **Dashboard control PIN** field and select **Unlock Controls**. The PIN is not written to GitHub. Refreshing the page clears the PIN from the browser.
 
 For a stable HTTPS deployment, configure a persistent secret and secure cookies before starting Flask:
 
