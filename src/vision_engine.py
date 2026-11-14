@@ -1,4 +1,5 @@
 import cv2
+import os
 import time
 import math
 import numpy as np
@@ -10,6 +11,16 @@ class VisionEngine:
     def __init__(self, model, emergency_detector=None):
         self.model = model
         self.emergency_detector = emergency_detector
+        try:
+            self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.22"))
+        except ValueError:
+            self.confidence_threshold = 0.22
+        self.confidence_threshold = min(0.95, max(0.05, self.confidence_threshold))
+        try:
+            self.image_size = int(os.environ.get("TRAFFIC_IMAGE_SIZE", "960"))
+        except ValueError:
+            self.image_size = 960
+        self.image_size = min(1280, max(640, self.image_size))
         self.history = defaultdict(lambda: deque(maxlen=20))
         self.first_seen = {}
         self.stationary_since = {}
@@ -32,11 +43,19 @@ class VisionEngine:
         stopped_waits = []
         traffic_boxes = []
         normal_annotations = []
-        detection_confidences = []
+        vehicle_detection_confidences = []
+        pedestrian_detection_confidences = []
+        class_detection_confidences = defaultdict(list)
 
         result = self.model.track(
-            frame, persist=True, conf=0.30, iou=0.45,
-            verbose=False, classes=[0, 2, 3, 5, 7]
+            frame,
+            persist=True,
+            conf=self.confidence_threshold,
+            iou=0.50,
+            imgsz=self.image_size,
+            max_det=500,
+            verbose=False,
+            classes=[0, 2, 3, 5, 7],
         )[0]
 
         boxes = result.boxes
@@ -49,13 +68,14 @@ class VisionEngine:
                 cy = (y1 + y2) // 2
 
                 if cid == 0:
-                    detection_confidences.append(conf)
+                    pedestrian_detection_confidences.append(conf)
                     pedestrians += 1
                     name = "Person"
                     label_color = (255, 180, 0)
                 elif cid in self.VEHICLES:
-                    detection_confidences.append(conf)
                     key = self.VEHICLES[cid]
+                    vehicle_detection_confidences.append(conf)
+                    class_detection_confidences[key].append(conf)
                     counts[key] += 1
                     directions[self._direction(cx, cy, w, h)] += 1
                     name = key[:-1].title()
@@ -201,16 +221,17 @@ class VisionEngine:
             "emergency_candidate_direction": emergency_candidate_direction,
             "emergency_candidate_confidence": emergency_candidate_confidence,
             "emergency_status": emergency_status,
-            "live_confidence": round(
-                float(np.mean(
-                    detection_confidences
-                    + ([emergency_confidence] if emergency else [])
-                    + ([emergency_candidate_confidence] if emergency_candidate_type and not emergency else [])
-                )) * 100, 1
-            ) if detection_confidences or emergency or emergency_candidate_type else None,
-            "live_confidence_samples": (
-                len(detection_confidences)
-                + (1 if emergency or emergency_candidate_type else 0)
-            ),
+            "vehicle_confidence": round(float(np.mean(vehicle_detection_confidences)) * 100, 1)
+            if vehicle_detection_confidences else None,
+            "vehicle_confidence_samples": len(vehicle_detection_confidences),
+            "vehicle_class_confidence": {
+                name: round(float(np.mean(values)) * 100, 1)
+                for name, values in class_detection_confidences.items() if values
+            },
+            "pedestrian_confidence": round(float(np.mean(pedestrian_detection_confidences)) * 100, 1)
+            if pedestrian_detection_confidences else None,
+            "live_confidence": round(float(np.mean(vehicle_detection_confidences)) * 100, 1)
+            if vehicle_detection_confidences else None,
+            "live_confidence_samples": len(vehicle_detection_confidences),
         }
         return metrics, frame
