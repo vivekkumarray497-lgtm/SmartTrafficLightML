@@ -65,8 +65,8 @@ class OperationalEvaluatorTests(unittest.TestCase):
             self.evaluator.record(self.prediction, self.actual, "")
 
     def test_emergency_accuracy_requires_positive_and_negative_examples(self):
-        for _ in range(3):
-            self.evaluator.record(self.prediction, self.actual)
+        for index in range(3):
+            self.evaluator.record(self.prediction, self.actual, f"frame-{index}")
         self.assertIsNone(self.evaluator.summary()["emergency_accuracy"])
 
 
