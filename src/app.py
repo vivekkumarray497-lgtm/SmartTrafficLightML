@@ -124,6 +124,30 @@ def evaluate_model_accuracy():
 
 MODEL_EVALUATION = evaluate_model_accuracy()
 
+def load_policy_evaluation():
+    try:
+        with open(POLICY_REPORT_PATH, "r", encoding="utf-8") as handle:
+            report = json.load(handle)
+        agreement = float(report["test_policy_agreement"]) * 100
+        return {
+            "agreement": round(agreement, 1),
+            "samples": int(report.get("test_samples", 0)),
+            "model": str(report.get("selected_model", "Traffic priority model")),
+            "status": "available",
+            "metric": "Held-out policy agreement"
+        }
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"Traffic policy evaluation unavailable: {exc}")
+        return {
+            "agreement": None,
+            "samples": 0,
+            "model": "Not trained",
+            "status": "unavailable",
+            "metric": "Policy evaluation unavailable"
+        }
+
+POLICY_EVALUATION = load_policy_evaluation()
+
 def get_camera():
     global camera, camera_source_id
     with camera_lock:
@@ -339,6 +363,11 @@ def current_state():
         result["model_accuracy_samples"] = MODEL_EVALUATION["samples"]
         result["model_accuracy_status"] = MODEL_EVALUATION["status"]
         result["model_accuracy_method"] = MODEL_EVALUATION["method"]
+        result["policy_model_agreement"] = POLICY_EVALUATION["agreement"]
+        result["policy_model_samples"] = POLICY_EVALUATION["samples"]
+        result["policy_model_name"] = POLICY_EVALUATION["model"]
+        result["policy_model_status"] = POLICY_EVALUATION["status"]
+        result["policy_model_metric"] = POLICY_EVALUATION["metric"]
         return result
 
 @app.route("/")
