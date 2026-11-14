@@ -7,11 +7,11 @@ A Flask-based smart traffic management application that combines computer vision
 - Browser-camera support for local and HTTPS cloud deployments
 - Editable server camera registry in `camera_config.py` for USB cameras, reachable RTSP/IP streams, and test video files
 - Dashboard selector for switching between configured server camera sources
-- YOLO-based detection of cars, motorcycles, buses, trucks, and pedestrians
+- YOLO-based detection of cars, motorcycles, buses, trucks, auto-rickshaws and pedestrians
 - YOLO-World detection for ambulance and fire-truck priority
-- Consecutive-frame confirmation and direction-aware emergency handling
-- Four-direction traffic estimation (North, South, East, West)
-- Traffic-density classification and adaptive green-time selection
+- Consecutive-frame emergency confirmation with Yellow and All-Red clearance before emergency Green
+- Camera-direction traffic assignment (North, South, East, West); one camera reports only its configured approach, not four independent approaches
+- Consistent traffic-density classification including zero-traffic state and adaptive green-time selection
 - Vehicle tracking and approximate speed estimation
 - Queue and waiting indicators
 - Random Forest prediction using the included 14-feature model
@@ -130,7 +130,7 @@ For live-camera accuracy, evaluate predictions against manually annotated frames
 
 ## Model and Evaluation Notes
 
-The application uses a general YOLO model for ordinary road-user detection and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection evaluates the full frame first, then falls back to a configurable number of vehicle crops (four by default) only when the full-frame pass finds no emergency class. Crop inference uses a lower confidence threshold and higher image resolution to improve detection of small or distant emergency vehicles. This avoids repeated crop inference when a full-frame emergency candidate is already present. A candidate label is not the same as confirmed emergency priority; priority requires consecutive-frame confirmation. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation and overlapping-box deduplication help stabilize emergency decisions, but they do not guarantee perfect classification. Set `EMERGENCY_CROP_LIMIT=0` to disable crop fallback or increase it for more recall at the cost of latency. Crop fallback can still add processing time when the full-frame pass misses an emergency vehicle. If model loading fails temporarily, the detector retries after a short cooldown instead of retrying on every frame.
+The application uses a YOLO vehicle detector (custom weights if trained and promoted; otherwise COCO YOLO11n) plus a separate pedestrian detector when the custom vehicle model has no person class, and YOLO-World's text-prompt capability for ambulance and fire-truck detection. Emergency detection evaluates the full frame first, then falls back to a configurable number of vehicle crops (four by default) only when the full-frame pass finds no emergency class. Crop inference uses a lower confidence threshold and higher image resolution to improve detection of small or distant emergency vehicles. This avoids repeated crop inference when a full-frame emergency candidate is already present. A candidate label is not the same as confirmed emergency priority; priority requires consecutive-frame confirmation. Detection quality can vary with camera angle, distance, lighting, occlusion, and image quality. Consecutive-frame confirmation and overlapping-box deduplication help stabilize emergency decisions, but they do not guarantee perfect classification. Set `EMERGENCY_CROP_LIMIT=0` to disable crop fallback or increase it for more recall at the cost of latency. Crop fallback can still add processing time when the full-frame pass misses an emergency vehicle. If model loading fails temporarily, the detector retries after a short cooldown instead of retrying on every frame.
 
 Vehicle speed is an estimate and depends on camera placement and calibration; it is not intended for enforcement. This project is an academic prototype and should be tested with representative day/night footage and fail-safe controls before any real-world signal deployment.
 
@@ -153,11 +153,11 @@ For the final camera demo, verify the behavior with a clear ambulance clip, a fi
 
 ## Emergency detector training
 
-The current emergency fallback uses YOLO-World, which is a zero-shot open-vocabulary detector. Its confidence score is not a measured accuracy percentage. For a dedicated emergency model, fine-tune the repository's YOLO11n weights using the public Roboflow **Fire Truck & Ambulance Detection** dataset (version 5, 2,456 labelled images (1,720 train, 491 validation and 245 test images), CC BY 4.0). Dataset attribution: **s Workspace**. Dataset page: https://universe.roboflow.com/s-workspace-kc9f0/fire-truck-ambulance-detection
+The current emergency fallback uses YOLO-World, which is a zero-shot open-vocabulary detector. Its confidence score is not a measured accuracy percentage. For a dedicated emergency model, fine-tune the repository's YOLO11n weights using the public Roboflow **Fire Truck & Ambulance Detection** dataset (version 5, 2,456 labelled images: 1,720 train, 491 validation and 245 test images, CC BY 4.0). Dataset attribution: **s Workspace**. Dataset page: https://universe.roboflow.com/s-workspace-kc9f0/fire-truck-ambulance-detection. The training script promotes weights only when the held-out test mAP@50 reaches 0.80 and both required emergency classes have test metrics.
 
 The training script keeps ambulance, fire-truck, police-car, towing-truck and normal-vehicle labels separate; only ambulance and fire-truck are mapped to emergency priority by the application.
 
-In Colab, set a Roboflow API key privately (do not commit it), install `requirements-emergency-training.txt`, and run `python src/train_emergency_detector.py`. The script trains on the dataset train split and evaluates the held-out test split. It saves `model/emergency_vehicle_detector.pt` and `reports/emergency_model_evaluation.json`. The application auto-selects these custom weights on restart when the model file is present.
+In Colab, set a Roboflow API key privately (do not commit it), install `requirements-emergency-training.txt`, and run `python src/train_emergency_detector.py`. The script trains on the dataset train split and evaluates the held-out test split. It writes `reports/emergency_model_evaluation.json` and promotes `model/emergency_vehicle_detector.pt` only when test mAP@50 is at least 0.80 and both ambulance and fire-truck classes have test metrics. A failed gate leaves the current application weights unchanged.
 
 The detector now requires a model score of at least 35% on the current frame and at least two matching above-threshold detections in the recent-frame window before it can activate emergency GREEN. Lower scores remain visible as weak candidates but cannot activate priority. The threshold is a conservative operating gate, not a claim that the classifier is 35% accurate. Tune it only after reviewing the new model's held-out precision/recall and separate road-camera tests.
 
@@ -175,8 +175,25 @@ The result estimates performance on the reviewed validation samples only. It is 
 
 ## Four-class traffic vehicle detector training
 
-The application uses the built-in YOLO11n COCO model by default. To fine-tune a project-specific detector for cars, bikes, buses and trucks, use the public Roboflow **Vehicle detection** dataset (release 1, 2,741 images, CC BY 4.0; attribution: Shubhams Workspace). The training script consolidates case variants into four project categories and evaluates the held-out test split.
+The application uses the built-in YOLO11n COCO model by default. To fine-tune a project-specific detector for car, bike/motorcycle, bus, truck and auto-rickshaw, use the public Roboflow **Vehicle detection** dataset (release 1, 2,741 images, CC BY 4.0; attribution: Shubhams Workspace). The training script consolidates source labels into five project categories, requires all five to appear in train/validation/test and evaluates the held-out test split. When a custom vehicle model is loaded, the base COCO model remains available as a separate pedestrian-only detector.
 
-In Colab, clone/pull this repository, install the optional training dependencies with `pip install roboflow pyyaml`, set `ROBOFLOW_API_KEY` privately, and run `python src/train_vehicle_detector.py`. The script writes `reports/traffic_vehicle_detector_evaluation.json`. It copies `model/traffic_vehicle_detector.pt` into the application only when held-out test mAP@50 is at least 0.80; otherwise the built-in model remains active. mAP@50 is an object-detection metric, not overall traffic-system accuracy.
+In Colab, clone/pull this repository, install the optional training dependencies with `pip install roboflow pyyaml`, set `ROBOFLOW_API_KEY` privately, and run `python src/train_vehicle_detector.py`. The script writes `reports/traffic_vehicle_detector_evaluation.json`. It copies `model/traffic_vehicle_detector.pt` into the application only when held-out test mAP@50 is at least 0.80 and all five classes have test metrics; otherwise the built-in model remains active. mAP@50 is an object-detection metric, not overall traffic-system accuracy.
 
 Dataset page: https://universe.roboflow.com/shubhams-workspace-wokrm/vehicle-detection-eckrb-cppsf
+
+## Signal transition and camera coverage safeguards
+
+A direction change now follows the demonstration sequence **Yellow (3 seconds) → All Red (1 second) → next Green**. Emergency priority and manual direction changes use the same clearance sequence; the dashboard reports emergency priority as active only after the emergency direction has actually received Green. These timings are project-demo defaults, not a certified traffic-signal controller or an approved road-safety timing plan.
+
+A single camera is assigned to one configured road approach. Selecting "North" does not infer the physical direction of each vehicle in the whole junction; all detections from that camera are counted under that configured approach. A real four-way installation needs separate, calibrated camera/ROI coverage for each approach and a dedicated multi-camera tracking design.
+
+## API request protection
+
+All dashboard POST requests under `/api/` require the session CSRF token issued with the dashboard page. Refresh the dashboard if a stale session token is rejected. For an HTTPS deployment, set a persistent secret and secure cookies before starting Flask:
+
+```bash
+export FLASK_SECRET_KEY="a-long-random-secret-stored-outside-the-repository"
+export COOKIE_SECURE=1
+```
+
+This protects browser sessions against cross-site request forgery. It is **not user authentication or authorization**. Do not expose manual signal/emergency controls as a public service or connect this academic prototype to live road hardware without a separate authenticated control plane, access controls, fail-safe interlocks and qualified safety review.
