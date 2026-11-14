@@ -122,11 +122,15 @@ def find_split_path(dataset_location, dataset_config, split):
         f"searched under {dataset_location}"
     )
 
-def prepare_four_class_dataset(dataset_location, source_config):
+def prepare_vehicle_dataset(dataset_location, source_config):
     source_names, class_map = resolve_source_class_map(source_config.get("names", {}))
     DATASET_ROOT.mkdir(parents=True, exist_ok=True)
     split_dirs = {}
     object_counts = {name: 0 for name in TARGET_NAMES}
+    split_object_counts = {
+        split: {name: 0 for name in TARGET_NAMES}
+        for split in ("train", "val", "test")
+    }
 
     for split, config_key in (("train", "train"), ("val", "val"), ("test", "test")):
         source_images = find_split_path(dataset_location, source_config, config_key)
@@ -170,15 +174,25 @@ def prepare_four_class_dataset(dataset_location, source_config):
                 parts[0] = str(target_id)
                 mapped_lines.append(" ".join(parts))
                 object_counts[TARGET_NAMES[target_id]] += 1
+                split_object_counts[split][TARGET_NAMES[target_id]] += 1
             (output_labels / label_file.name).write_text(
                 "\n".join(mapped_lines) + ("\n" if mapped_lines else ""),
                 encoding="utf-8",
             )
         split_dirs[split] = output_images
 
-    empty_classes = [name for name, count in object_counts.items() if count == 0]
-    if empty_classes:
-        raise ValueError(f"No mapped training objects found for classes: {empty_classes}")
+    missing_by_split = {
+        split: [name for name, count in counts.items() if count == 0]
+        for split, counts in split_object_counts.items()
+    }
+    missing_by_split = {
+        split: missing for split, missing in missing_by_split.items() if missing
+    }
+    if missing_by_split:
+        raise ValueError(
+            "Every target class must have labelled objects in train, validation "
+            f"and test splits. Missing classes: {missing_by_split}"
+        )
 
     config_path = DATASET_ROOT / "data.yaml"
     config = {
@@ -190,7 +204,7 @@ def prepare_four_class_dataset(dataset_location, source_config):
         "names": TARGET_NAMES,
     }
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-    return config_path, source_names, class_map, object_counts
+    return config_path, source_names, class_map, object_counts, split_object_counts
 
 
 def safe_metric(value):
@@ -220,7 +234,7 @@ def main():
         raise FileNotFoundError(f"Roboflow export has no data.yaml: {source_yaml}")
 
     source_config = yaml.safe_load(source_yaml.read_text(encoding="utf-8"))
-    dataset_yaml, source_names, class_map, object_counts = prepare_four_class_dataset(
+    dataset_yaml, source_names, class_map, object_counts, split_object_counts = prepare_vehicle_dataset(
         dataset_location, source_config
     )
 
@@ -289,7 +303,12 @@ def main():
             "map50_95": safe_metric(box.ap[position].mean()) if len(box.ap) > position else None,
         }
 
-    promoted = map50 is not None and map50 >= MIN_MAP50
+    all_target_classes_tested = set(per_class) == set(TARGET_NAMES)
+    promoted = (
+        map50 is not None
+        and map50 >= MIN_MAP50
+        and all_target_classes_tested
+    )
     if promoted:
         OUTPUT_WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
         temporary_weights = OUTPUT_WEIGHTS.with_suffix(".tmp.pt")
@@ -305,6 +324,8 @@ def main():
         "source_class_names": source_names,
         "target_class_names": TARGET_NAMES,
         "mapped_object_counts": object_counts,
+        "mapped_object_counts_by_split": split_object_counts,
+        "all_target_classes_tested": all_target_classes_tested,
         "source_class_mapping": {str(key): value for key, value in class_map.items()},
         "base_model": BASE_WEIGHTS.name,
         "training_epochs_requested": EPOCHS,
@@ -328,8 +349,9 @@ def main():
     print(json.dumps(report, indent=2))
     if not promoted:
         raise SystemExit(
-            f"Model NOT promoted: held-out mAP@50={map50}; required minimum={MIN_MAP50}. "
-            "Collect more representative images, tune the model, and retrain."
+            f"Model NOT promoted: held-out mAP@50={map50}; required minimum={MIN_MAP50}; "
+            f"all target classes tested={all_target_classes_tested}. "
+            "Collect representative labelled images for every class, then retrain."
         )
 
 
