@@ -10,6 +10,8 @@ import pandas as pd
 from sklearn.metrics import accuracy_score
 import threading
 import time
+import uuid
+from collections import OrderedDict
 from datetime import datetime
 from ultralytics import YOLO
 
@@ -46,7 +48,7 @@ from vision_engine import VisionEngine
 from adaptive_controller import AdaptiveController
 from analytics_store import AnalyticsStore
 from emergency_detector import EmergencyDetector
-from operational_evaluation import OperationalEvaluator
+from operational_evaluation import OperationalEvaluator, DuplicateSceneError
 from camera_config import CAMERAS, ACTIVE_CAMERA_ID
 
 model = joblib.load(MODEL_PATH)
@@ -67,6 +69,9 @@ operational_evaluator = OperationalEvaluator(
 
 camera = None
 camera_source_id = None
+frame_session_id = uuid.uuid4().hex
+frame_sequence = 0
+frame_observations = OrderedDict()
 active_camera_id = ACTIVE_CAMERA_ID
 _initial_camera = next((item for item in CAMERAS if str(item.get("id")) == str(ACTIVE_CAMERA_ID)), None)
 active_camera_direction = (_initial_camera or {}).get("direction", "North")
@@ -101,7 +106,7 @@ traffic_data = {
     "active_direction": "North", "green_time": 15,
     "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
     "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
-    "mode": "Auto", "countdown": 15,
+    "mode": "Auto", "countdown": 15, "frame_id": "",
     "live_confidence": None, "live_confidence_samples": 0,
     "vehicle_confidence": None, "vehicle_confidence_samples": 0,
     "vehicle_class_confidence": {}, "pedestrian_confidence": None
@@ -396,12 +401,27 @@ def update_state(metrics):
             "mode": control_mode,
             "countdown": countdown,
             "signal_message": signal_message,
-            "updated_at": datetime.now().strftime("%H:%M:%S")
+            "updated_at": datetime.now().strftime("%H:%M:%S"),
+            "frame_id": metrics.get("frame_id", traffic_data.get("frame_id", "")),
         })
+        frame_id = str(metrics.get("frame_id") or "")
+        if frame_id:
+            frame_observations[frame_id] = {
+                "density": metrics["density"],
+                "direction": active,
+                "emergency_type": (
+                    str(metrics.get("emergency_type", "")).lower().replace(" ", "_")
+                    if metrics.get("emergency") else "none"
+                ),
+                "signal": signal,
+            }
+            while len(frame_observations) > 200:
+                frame_observations.popitem(last=False)
 
     analytics.append(metrics, active, signal)
 
 def detect_frame(frame, camera_direction=None):
+    global frame_sequence
     with frame_lock:
         metrics, annotated = vision.process(frame)
         if camera_direction in DIRECTIONS:
@@ -413,6 +433,8 @@ def detect_frame(frame, camera_direction=None):
                 metrics["emergency_direction"] = camera_direction
             if metrics.get("emergency_candidate_type"):
                 metrics["emergency_candidate_direction"] = camera_direction
+        frame_sequence += 1
+        metrics["frame_id"] = f"{frame_session_id}:{frame_sequence}"
         update_state(metrics)
         return annotated
 
@@ -446,6 +468,7 @@ def reset_state():
             "emergency_candidate_direction": "",
             "emergency_candidate_confidence": 0.0,
             "emergency_status": "no_candidate",
+            "frame_id": "",
             "live_confidence": None,
             "live_confidence_samples": 0,
             "vehicle_confidence": None,
@@ -477,7 +500,7 @@ def generate_frames():
         with state_lock:
             s = dict(traffic_data)
         cv2.putText(
-            frame, f"SMART TRAFFIC | {s['density']} | {s['active_direction']} GREEN",
+            frame, f"SMART TRAFFIC | {s['density']} | {s['active_direction']} {s['signal']}",
             (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2
         )
         cv2.putText(
@@ -528,6 +551,15 @@ def api_validation_sample():
     if state.get("updated_at") in {"Not started", "Camera stopped"}:
         return jsonify({"error": "Start a camera and process a frame before recording a sample."}), 409
 
+    scene_id = str(payload.get("scene_id") or "").strip()
+    with state_lock:
+        predicted = frame_observations.get(scene_id)
+
+    if predicted is None:
+        return jsonify({
+            "error": "This camera frame is no longer available for validation. Select the current frame and try again."
+        }), 409
+
     try:
         actual = {
             "density": payload.get("density"),
@@ -535,20 +567,13 @@ def api_validation_sample():
             "emergency_type": payload.get("emergency_type"),
             "signal": payload.get("signal"),
         }
-        predicted = {
-            "density": state.get("density"),
-            "direction": state.get("active_direction"),
-            "emergency_type": (
-                str(state.get("emergency_type", "")).lower().replace(" ", "_")
-                if state.get("emergency") else "none"
-            ),
-            "signal": state.get("signal"),
-        }
-        evaluation = operational_evaluator.record(predicted, actual)
+        evaluation = operational_evaluator.record(predicted, actual, scene_id)
         return jsonify({
-            "message": "Human-verified validation sample saved.",
+            "message": "Human-verified validation sample saved for the selected camera frame.",
             "evaluation": evaluation,
         })
+    except DuplicateSceneError as exc:
+        return jsonify({"error": str(exc)}), 409
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     except OSError as exc:
