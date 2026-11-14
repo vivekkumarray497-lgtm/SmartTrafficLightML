@@ -3,14 +3,16 @@ import os
 import time
 import math
 import numpy as np
+from traffic_density import calculate_traffic_density
 from collections import defaultdict, deque
 
 class VisionEngine:
-    VEHICLES = {2: "cars", 3: "bikes", 5: "buses", 7: "trucks"}
+    VEHICLES = {1: "bikes", 2: "cars", 3: "bikes", 5: "buses", 7: "trucks"}
 
-    def __init__(self, model, emergency_detector=None):
+    def __init__(self, model, emergency_detector=None, person_model=None):
         self.model = model
         self.emergency_detector = emergency_detector
+        self.person_model = person_model
         self.vehicle_classes, self.person_classes = self._resolve_model_classes(model)
         try:
             self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.22"))
@@ -52,6 +54,11 @@ class VisionEngine:
             "lorry": "trucks",
             "mini truck": "trucks",
             "mini_truck": "trucks",
+            "auto": "auto_rickshaws",
+            "auto rickshaw": "auto_rickshaws",
+            "rickshaw": "auto_rickshaws",
+            "tuk tuk": "auto_rickshaws",
+            "tuktuk": "auto_rickshaws",
             "person": "person",
             "people": "person",
         }
@@ -78,7 +85,7 @@ class VisionEngine:
         emergency_input = frame.copy()
 
         h, w = frame.shape[:2]
-        counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0}
+        counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0, "auto_rickshaws": 0}
         directions = {d: 0 for d in ["North", "South", "East", "West"]}
         pedestrians = 0
         speeds = []
@@ -100,16 +107,36 @@ class VisionEngine:
             classes=sorted(set(self.vehicle_classes) | self.person_classes),
         )[0]
 
+        detections_to_process = []
         boxes = result.boxes
         if boxes is not None:
-            for i, box in enumerate(boxes):
-                cid = int(box.cls[0])
-                conf = float(box.conf[0])
+            for index, box in enumerate(boxes):
+                class_id = int(box.cls[0])
+                detections_to_process.append(
+                    (box, class_id, class_id in self.person_classes, index)
+                )
+
+        if self.person_model is not None and not self.person_classes:
+            person_result = self.person_model.predict(
+                frame,
+                conf=max(0.15, self.confidence_threshold),
+                iou=0.50,
+                imgsz=self.image_size,
+                max_det=200,
+                classes=[0],
+                verbose=False,
+            )[0]
+            if person_result.boxes is not None:
+                for index, box in enumerate(person_result.boxes):
+                    detections_to_process.append((box, 0, True, index))
+
+        for box, cid, is_person, index in detections_to_process:
+            conf = float(box.conf[0])
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
                 cx = (x1 + x2) // 2
                 cy = (y1 + y2) // 2
 
-                if cid in self.person_classes:
+                if is_person:
                     pedestrian_detection_confidences.append(conf)
                     pedestrians += 1
                     name = "Person"
@@ -120,9 +147,15 @@ class VisionEngine:
                     class_detection_confidences[key].append(conf)
                     counts[key] += 1
                     directions[self._direction(cx, cy, w, h)] += 1
-                    name = {"cars": "Car", "bikes": "Bike", "buses": "Bus", "trucks": "Truck"}[key]
+                    name = {
+                        "cars": "Car", "bikes": "Bike", "buses": "Bus",
+                        "trucks": "Truck", "auto_rickshaws": "Auto-rickshaw",
+                    }[key]
                     label_color = (0, 255, 0)
-                    canonical_class_id = {"cars": 2, "bikes": 3, "buses": 5, "trucks": 7}[key]
+                    canonical_class_id = {
+                        "cars": 2, "bikes": 3, "buses": 5,
+                        "trucks": 7, "auto_rickshaws": 8,
+                    }[key]
                     traffic_boxes.append({
                         "class_id": canonical_class_id,
                         "model_class_id": cid,
@@ -131,7 +164,10 @@ class VisionEngine:
                 else:
                     continue
 
-                tid = int(box.id[0]) if box.id is not None else i
+                tid = (
+                    int(box.id[0]) if box.id is not None
+                    else (-100000 - index if is_person and self.person_model is not None else index)
+                )
                 now = time.time()
                 previous = self.history[tid][-1] if self.history[tid] else None
                 self.history[tid].append((now, cx, cy))
@@ -142,9 +178,9 @@ class VisionEngine:
                     if dt > 0.01:
                         pixel_speed = dist / dt
 
-                        if cid in self.vehicle_classes:
+                        if not is_person and cid in self.vehicle_classes:
                             speeds.append(min(pixel_speed * 0.08, 120))
-                        if cid in self.vehicle_classes and pixel_speed < 5.0:
+                        if not is_person and cid in self.vehicle_classes and pixel_speed < 5.0:
                             self.stationary_since.setdefault(tid, now)
                             stopped_waits.append(max(0.0, now - self.stationary_since[tid]))
                         else:
@@ -157,7 +193,7 @@ class VisionEngine:
                     "box": [x1, y1, x2, y2],
                     "label": f"{name} {conf:.2f} ID:{tid}",
                     "color": label_color,
-                    "is_vehicle": cid in self.vehicle_classes,
+                    "is_vehicle": not is_person and cid in self.vehicle_classes,
                 })
 
         emergency = False
@@ -234,6 +270,10 @@ class VisionEngine:
             )
 
         total = sum(counts.values())
+        density_info = calculate_traffic_density(
+            counts["cars"], counts["bikes"], counts["buses"],
+            counts["trucks"], counts["auto_rickshaws"],
+        )
         avg_speed = round(sum(speeds) / len(speeds), 1) if speeds else 0.0
 
         queue_length = sum(
@@ -254,7 +294,7 @@ class VisionEngine:
             "directions": directions,
             "pedestrians": pedestrians,
             "avg_speed": avg_speed,
-            "density": density,
+            "density": density_info["density"],
             "queue_length": queue_length,
             "avg_waiting_time": avg_waiting_time,
             "emergency": emergency,
