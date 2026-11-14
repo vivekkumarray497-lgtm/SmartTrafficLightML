@@ -281,13 +281,6 @@ class VisionEngine:
             if (item["box"][1] + item["box"][3]) / 2 >= h * 0.60
         )
         avg_waiting_time = round(sum(stopped_waits) / len(stopped_waits), 1) if stopped_waits else 0.0
-        density = (
-            "LOW" if total < 6 else
-            "MEDIUM" if total < 15 else
-            "HIGH" if total < 30 else
-            "VERY HIGH"
-        )
-
         metrics = {
             **counts,
             "total_vehicles": total,
