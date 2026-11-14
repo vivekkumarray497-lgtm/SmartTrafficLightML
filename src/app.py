@@ -91,7 +91,9 @@ traffic_data = {
     "signal": "Green", "signal_message": "No traffic - GREEN LIGHT",
     "ml_prediction": "Green", "updated_at": "Not started", "emergency_type": "", "emergency_direction": "", "emergency_confidence": 0.0,
     "mode": "Auto", "countdown": 15,
-    "live_confidence": None, "live_confidence_samples": 0
+    "live_confidence": None, "live_confidence_samples": 0,
+    "vehicle_confidence": None, "vehicle_confidence_samples": 0,
+    "vehicle_class_confidence": {}, "pedestrian_confidence": None
 }
 
 def evaluate_model_accuracy():
@@ -277,6 +279,10 @@ def update_state(metrics):
             "emergency_status": metrics.get("emergency_status", "no_candidate"),
             "live_confidence": metrics.get("live_confidence"),
             "live_confidence_samples": metrics.get("live_confidence_samples", 0),
+            "vehicle_confidence": metrics.get("vehicle_confidence"),
+            "vehicle_confidence_samples": metrics.get("vehicle_confidence_samples", 0),
+            "vehicle_class_confidence": dict(metrics.get("vehicle_class_confidence", {})),
+            "pedestrian_confidence": metrics.get("pedestrian_confidence"),
             "directions": dict(metrics["directions"]),
             "active_direction": active,
             "green_time": active_info["green_time"] if control_mode == "Auto" else 0,
@@ -340,6 +346,10 @@ def reset_state():
             "emergency_status": "no_candidate",
             "live_confidence": None,
             "live_confidence_samples": 0,
+            "vehicle_confidence": None,
+            "vehicle_confidence_samples": 0,
+            "vehicle_class_confidence": {},
+            "pedestrian_confidence": None,
             "mode": control_mode,
             "countdown": 0 if control_mode == "Manual" else 15,
             "updated_at": "Camera stopped"
@@ -459,6 +469,8 @@ def api_health():
         "browser_camera": True,
         "model": model is not None,
         "vehicle_detector": yolo_model is not None,
+        "vehicle_detection_confidence_threshold": vision.confidence_threshold,
+        "vehicle_detection_image_size": vision.image_size,
         "emergency_detector": emergency_detector.available,
         "emergency_detector_loaded": emergency_model_loaded,
         "emergency_detector_status": emergency_model_status,
