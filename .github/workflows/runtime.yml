@@ -50,10 +50,16 @@ jobs:
           with client.session_transaction() as session:
               csrf_token = session["csrf_token"]
           csrf_headers = {"X-CSRF-Token": csrf_token}
+          control_headers = {
+              **csrf_headers,
+              "X-Control-Token": app.CONTROL_API_TOKEN,
+          }
 
-          # State-changing API requests must reject a missing CSRF token.
+          # State-changing API requests must reject missing CSRF and control tokens.
           csrf_rejected = client.post("/api/camera/reset")
           assert csrf_rejected.status_code == 403, csrf_rejected.data.decode()
+          control_rejected = client.post("/api/camera/reset", headers=csrf_headers)
+          assert control_rejected.status_code == 403, control_rejected.data.decode()
 
           health = client.get("/api/health")
           assert health.status_code == 200, health.data.decode()
@@ -62,13 +68,14 @@ jobs:
           # A fresh process must report degraded/not_loaded rather than falsely healthy.
           assert health_data["status"] == "degraded", health_data
           assert health_data["emergency_detector_status"] == "not_loaded", health_data
+          assert health_data["control_auth_required"] is True, health_data
 
           state = client.get("/api/state")
           assert state.status_code == 200, state.data.decode()
           state_data = state.get_json()
           assert set(["North", "South", "East", "West"]).issubset(state_data["directions"])
 
-          reset = client.post("/api/camera/reset", headers=csrf_headers)
+          reset = client.post("/api/camera/reset", headers=control_headers)
           assert reset.status_code == 200, reset.data.decode()
           reset_state = reset.get_json()
           assert reset_state["signal"] == "All Red", reset_state
@@ -77,7 +84,7 @@ jobs:
           invalid = client.post(
               "/api/control",
               json={"emergency": True, "emergency_type": "police", "emergency_direction": "North"},
-              headers=csrf_headers,
+              headers=control_headers,
           )
           assert invalid.status_code == 400, invalid.data.decode()
 
