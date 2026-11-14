@@ -7,7 +7,6 @@ import sys
 import cv2
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import threading
 import time
@@ -126,18 +125,23 @@ def evaluate_model_accuracy():
             "weather_condition", "temperature", "humidity", "accident_reported",
             "hour", "minute", "day", "month"
         ]
-        evaluation = df[features + ["signal_status"]].dropna()
+        evaluation = (
+            df[features + ["signal_status", "timestamp"]]
+            .dropna()
+            .sort_values("timestamp")
+            .reset_index(drop=True)
+        )
         X = evaluation[features]
         y = evaluation["signal_status"].astype(int)
-        _, X_test, _, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
+        split_index = int(len(evaluation) * 0.80)
+        X_test = X.iloc[split_index:]
+        y_test = y.iloc[split_index:]
         accuracy = float(accuracy_score(y_test, model.predict(X_test)) * 100)
         return {
             "accuracy": round(accuracy, 1),
             "samples": int(len(y_test)),
             "status": "available",
-            "method": "Held-out test split (20%)"
+            "method": "Chronological held-out test split (final 20%)"
         }
     except Exception as exc:
         print(f"Model accuracy evaluation unavailable: {exc}")
