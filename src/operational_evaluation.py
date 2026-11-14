@@ -5,13 +5,17 @@ import threading
 from datetime import datetime, timezone
 
 
+class DuplicateSceneError(ValueError):
+    """Raised when a camera frame has already been used for validation."""
+
+
 class OperationalEvaluator:
     FIELDS = ("density", "direction", "emergency_type", "signal")
     ALLOWED = {
         "density": {"NO TRAFFIC", "LOW", "MEDIUM", "HIGH", "VERY HIGH"},
         "direction": {"North", "South", "East", "West"},
         "emergency_type": {"none", "ambulance", "fire_truck"},
-        "signal": {"Red", "Yellow", "Green"},
+        "signal": {"Red", "Yellow", "Green", "All Red"},
     }
 
     def __init__(self, csv_path, report_path, minimum_samples=50):
@@ -22,16 +26,34 @@ class OperationalEvaluator:
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
         if not os.path.exists(self.csv_path):
-            with open(self.csv_path, "w", newline="", encoding="utf-8") as handle:
-                csv.DictWriter(handle, fieldnames=self._columns()).writeheader()
+            self._write_rows([])
+        else:
+            self._migrate_schema_if_needed()
 
     @classmethod
     def _columns(cls):
-        columns = ["timestamp"]
+        columns = ["timestamp", "scene_id"]
         for field in cls.FIELDS:
             columns.extend((f"predicted_{field}", f"actual_{field}"))
         columns.append("exact_match")
         return columns
+
+    def _write_rows(self, rows):
+        with open(self.csv_path, "w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self._columns())
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def _migrate_schema_if_needed(self):
+        try:
+            with open(self.csv_path, newline="", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                old_fields = reader.fieldnames or []
+                rows = list(reader)
+            if old_fields != self._columns():
+                self._write_rows(rows)
+        except (OSError, csv.Error):
+            self._write_rows([])
 
     @classmethod
     def _normalize(cls, field, value):
@@ -46,8 +68,15 @@ class OperationalEvaluator:
             raise ValueError(f"Invalid {field} value: {value or '(empty)'}")
         return value
 
-    def record(self, prediction, actual):
-        row = {"timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    def record(self, prediction, actual, scene_id):
+        scene_id = str(scene_id or "").strip()
+        if not scene_id:
+            raise ValueError("A unique camera frame ID is required for validation.")
+
+        row = {
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "scene_id": scene_id,
+        }
         matches = []
         for field in self.FIELDS:
             predicted_value = self._normalize(field, prediction.get(field))
@@ -58,6 +87,13 @@ class OperationalEvaluator:
         row["exact_match"] = int(all(matches))
 
         with self.lock:
+            with open(self.csv_path, newline="", encoding="utf-8") as handle:
+                existing_rows = list(csv.DictReader(handle))
+            if any(existing.get("scene_id") == scene_id for existing in existing_rows):
+                raise DuplicateSceneError(
+                    "This exact camera frame has already been submitted. Capture a new scene."
+                )
+
             with open(self.csv_path, "a", newline="", encoding="utf-8") as handle:
                 csv.DictWriter(handle, fieldnames=self._columns()).writerow(row)
             summary = self._summary_unlocked()
@@ -73,7 +109,7 @@ class OperationalEvaluator:
         try:
             with open(self.csv_path, newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
-        except OSError:
+        except (OSError, csv.Error):
             rows = []
 
         total = len(rows)
@@ -118,9 +154,10 @@ class OperationalEvaluator:
 
         result["limitations"] = [
             "Ground truth is manually entered by a reviewer who independently checks the scene.",
+            "Each unique captured camera frame can be submitted only once.",
             "Overall accuracy is strict exact match across density, priority direction, emergency class and signal phase.",
             "The result applies only to the labelled validation samples and conditions represented.",
-            "Collect diverse scenes; avoid repeatedly labelling near-identical consecutive frames.",
+            "Collect diverse scenes; avoid near-identical consecutive frames.",
             "This offline validation metric does not certify road safety or authorize real-world deployment.",
         ]
         return result
