@@ -26,6 +26,7 @@ PROJECT = "fire-truck-ambulance-detection"
 VERSION = 5
 IMAGE_SIZE = 640
 EPOCHS = int(os.environ.get("EMERGENCY_TRAIN_EPOCHS", "100"))
+MIN_MAP50 = float(os.environ.get("EMERGENCY_MIN_MAP50", "0.80"))
 
 
 def normalize_name(value):
@@ -146,6 +147,14 @@ def main():
             "map50_95": metric_value(class_ap[position].mean()) if len(class_ap) > position else None,
         }
 
+    map50 = metric_value(box.map50)
+    required_emergency_classes = {"ambulance", "fire_truck"}
+    tested_emergency_classes = {
+        normalize_name(name) for name in per_class
+    }
+    emergency_classes_tested = required_emergency_classes.issubset(tested_emergency_classes)
+    promoted = map50 is not None and map50 >= MIN_MAP50 and emergency_classes_tested
+
     report = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "dataset_source": f"{WORKSPACE}/{PROJECT}/{VERSION}",
@@ -157,10 +166,13 @@ def main():
         "training_epochs": EPOCHS,
         "image_size": IMAGE_SIZE,
         "test_split": "test",
+        "promotion_threshold_map50": MIN_MAP50,
+        "required_emergency_classes_tested": emergency_classes_tested,
+        "promoted_to_application": promoted,
         "test_metrics": {
             "precision": metric_value(box.mp),
             "recall": metric_value(box.mr),
-            "map50": metric_value(box.map50),
+            "map50": map50,
             "map50_95": metric_value(box.map),
             "per_class": per_class,
         },
@@ -173,17 +185,31 @@ def main():
         ],
     }
 
-    OUTPUT_WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(best_weights, OUTPUT_WEIGHTS)
+    if promoted:
+        OUTPUT_WEIGHTS.parent.mkdir(parents=True, exist_ok=True)
+        temporary_weights = OUTPUT_WEIGHTS.with_suffix(".tmp.pt")
+        shutil.copy2(best_weights, temporary_weights)
+        temporary_weights.replace(OUTPUT_WEIGHTS)
+        report["application_weights"] = str(OUTPUT_WEIGHTS)
+    else:
+        report["application_weights"] = None
+
     with open(REPORT_PATH, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
 
     print("\nHeld-out emergency model evaluation")
     print(json.dumps(report["test_metrics"], indent=2))
-    print(f"Custom emergency weights saved: {OUTPUT_WEIGHTS}")
     print(f"Evaluation report saved: {REPORT_PATH}")
-    print("Restart Flask to auto-load the custom emergency model.")
+    if promoted:
+        print(f"Custom emergency weights promoted: {OUTPUT_WEIGHTS}")
+        print("Restart Flask to auto-load the custom emergency model.")
+    else:
+        print(
+            f"Emergency weights NOT promoted. Required mAP@50 >= {MIN_MAP50:.2f} "
+            "and both ambulance/fire-truck classes present in the test metrics."
+        )
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
