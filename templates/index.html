@@ -222,7 +222,7 @@ async function saveValidationSample() {
   try {
     const response = await fetch('/api/validation/sample', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: csrfHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify(payload)
     });
     const data = await response.json();
@@ -389,7 +389,7 @@ async function sendFrame() {
 async function setMode(mode) {
   const status = document.getElementById('modeStatus');
   try {
-    const response = await fetch('/api/mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mode})});
+    const response = await fetch('/api/mode', {method:'POST', headers:csrfHeaders({'Content-Type':'application/json'}), body:JSON.stringify({mode})});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not change mode');
     status.textContent = data.message;
@@ -401,7 +401,7 @@ async function applyManualDirection() {
   const direction = document.getElementById('manualDirection').value;
   const status = document.getElementById('modeStatus');
   try {
-    const response = await fetch('/api/manual-control', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({direction})});
+    const response = await fetch('/api/manual-control', {method:'POST', headers:csrfHeaders({'Content-Type':'application/json'}), body:JSON.stringify({direction})});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not set direction');
     status.textContent = data.message;
