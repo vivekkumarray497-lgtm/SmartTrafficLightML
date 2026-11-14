@@ -23,7 +23,7 @@ RUNS_DIR = ROOT / "runs" / "emergency_training"
 
 WORKSPACE = "s-workspace-kc9f0"
 PROJECT = "fire-truck-ambulance-detection"
-VERSION = 2
+VERSION = 5
 IMAGE_SIZE = 640
 EPOCHS = int(os.environ.get("EMERGENCY_TRAIN_EPOCHS", "100"))
 
@@ -166,7 +166,7 @@ def main():
         },
         "limitations": [
             "These metrics are from the dataset test split, not from the user's live camera.",
-            "The public dataset test split contains 44 images in version 2.",
+            "The public dataset test split contains 245 images in version 5.",
             "Independent road-camera validation is still required before any deployment claim.",
             "Only ambulance and fire-truck classes are allowed to activate emergency priority in the application.",
             "Police and ordinary vehicles must never activate emergency priority.",
