@@ -149,3 +149,16 @@ For the final camera demo, verify the behavior with a clear ambulance clip, a fi
 
 - [Ultralytics YOLO-World documentation](https://docs.ultralytics.com/models/yolo-world)
 - [Ultralytics object-detection training guide](https://docs.ultralytics.com/tasks/detect)
+
+
+## End-to-end operational accuracy validation
+
+The dashboard's **Overall Traffic System Accuracy** uses human-verified camera samples. It remains unavailable until at least 50 independently reviewed samples have been recorded.
+
+1. Run the dashboard in **Auto** mode and start the camera.
+2. For a distinct scene, independently review the camera image and choose the correct traffic density, priority direction, emergency class and signal phase in the **Validate This Camera Result** panel.
+3. Save one sample only after the reviewer has checked the scene. Do not copy the AI output into the ground-truth fields.
+4. Collect varied scenes (different traffic levels, directions, lighting and weather). Avoid repeatedly recording almost identical consecutive frames.
+5. A sample is correct only when all four outputs match the human-verified labels. Component scores are reported separately. Emergency-class accuracy is withheld until at least five positive emergency scenes and five no-emergency scenes have been labelled.
+
+The result estimates performance on the reviewed validation samples only. It is not a guarantee of performance at every junction and does not certify the system as safe for live road deployment. A larger, independently reviewed test set (preferably 200+ diverse samples) is recommended before reporting a deployment claim.

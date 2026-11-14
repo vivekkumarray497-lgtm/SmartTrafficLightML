@@ -44,8 +44,32 @@
 <div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><div class="signal-meta"><span>Mode: <b id="signalMode">{{state.mode}}</b></span><span>Re-evaluation: <b id="signalCountdown">{{state.countdown}}</b>s</span></div><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
 <div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted" id="emergencyStatus">No ambulance or fire-truck candidate in the current frame.</p><p class="muted">Candidate confidence is the AI model score, not verified accuracy. GREEN priority activates only after repeated-frame confirmation. Police, buses and ordinary trucks do not trigger emergency priority.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
 <div class="card"><h2>🤖 Legacy Signal-Label Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Retained for comparison with the original dataset labels. The live controller uses YOLO vehicle counts and the adaptive traffic controller.</p></div>
-<div class="card"><h2>📈 Traffic Priority Model Evaluation</h2><div class="stats"><div class="stat">Held-out Policy Agreement<strong>{% if state.policy_model_agreement is not none %}{{state.policy_model_agreement}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Test Records<strong>{{state.policy_model_samples}}</strong></div></div><p class="muted">Model: {{state.policy_model_name}} · Evaluation: {{state.policy_model_metric}}. This measures agreement with the documented LOW / MEDIUM / HIGH traffic-pressure policy on later dataset records. It is not real-world or live-camera accuracy.</p></div>
-<div class="card"><h2>📊 Overall Model Evaluation Snapshot</h2><div class="stats"><div class="stat">Legacy Signal Holdout Accuracy<strong>{% if state.model_accuracy is not none %}{{state.model_accuracy}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Traffic Policy Agreement<strong>{% if state.policy_model_agreement is not none %}{{state.policy_model_agreement}}%{% else %}N/A{% endif %}</strong></div><div class="stat">Emergency Detection Accuracy<strong>Not measured</strong></div></div><p class="muted">Legacy signal-label model: {{state.model_accuracy}}% on {{state.model_accuracy_samples}} held-out rows. Traffic policy model: {{state.policy_model_agreement}}% agreement on {{state.policy_model_samples}} held-out rows using policy-generated labels. Emergency detection has no independently labelled test set in this repository, so its accuracy cannot yet be reported. These scores measure different tasks and must not be combined into one overall percentage.</p></div>
+<div class="card"><h2>📈 Overall Traffic System Accuracy</h2>
+<div class="stats">
+<div class="stat">End-to-End Accuracy<strong id="operationalAccuracy">{% if state.operational_evaluation.accuracy is not none %}{{state.operational_evaluation.accuracy}}%{% else %}Not yet tested{% endif %}</strong></div>
+<div class="stat">Verified Samples<strong id="operationalSamples">{{state.operational_evaluation.total_samples}} / {{state.operational_evaluation.minimum_samples}}</strong></div>
+<div class="stat">Correct Samples<strong id="operationalCorrect">{{state.operational_evaluation.correct_samples}}</strong></div>
+</div>
+<p class="muted" id="operationalAccuracyNote">This is strict end-to-end exact-match accuracy against human-verified scene labels. It becomes available after at least {{state.operational_evaluation.minimum_samples}} independent samples. It is not inferred from AI confidence or policy-generated labels.</p>
+<div class="stats">
+<div class="stat">Density<strong id="validationDensityAccuracy">{% if state.operational_evaluation.component_accuracy.density is not none %}{{state.operational_evaluation.component_accuracy.density}}%{% else %}—{% endif %}</strong></div>
+<div class="stat">Priority Direction<strong id="validationDirectionAccuracy">{% if state.operational_evaluation.component_accuracy.direction is not none %}{{state.operational_evaluation.component_accuracy.direction}}%{% else %}—{% endif %}</strong></div>
+<div class="stat">Emergency Class<strong id="validationEmergencyAccuracy">{% if state.operational_evaluation.emergency_accuracy is not none %}{{state.operational_evaluation.emergency_accuracy}}%{% else %}Needs emergency cases{% endif %}</strong></div>
+<div class="stat">Signal Phase<strong id="validationSignalAccuracy">{% if state.operational_evaluation.component_accuracy.signal is not none %}{{state.operational_evaluation.component_accuracy.signal}}%{% else %}—{% endif %}</strong></div>
+</div>
+<p class="muted" id="emergencyValidationNote">Emergency validation cases: {{state.operational_evaluation.emergency_positive_samples}} positive and {{state.operational_evaluation.emergency_negative_samples}} negative. At least 5 of each are required before showing emergency-class accuracy.</p>
+</div>
+<div class="card"><h2>🧾 Validate This Camera Result</h2>
+<p class="muted">Independently inspect the current camera scene. Select what a human reviewer considers correct, not what the AI currently displays. One sample is one distinct scene—not repeated copies of the same frame.</p>
+<div class="row">
+<div><label for="actualDensity">Verified traffic density</label><select id="actualDensity"><option value="">Select actual density</option><option>NO TRAFFIC</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>VERY HIGH</option></select></div>
+<div><label for="actualDirection">Correct priority direction</label><select id="actualDirection"><option value="">Select correct direction</option><option>North</option><option>South</option><option>East</option><option>West</option></select></div>
+<div><label for="actualEmergency">Verified emergency vehicle</label><select id="actualEmergency"><option value="">Select actual class</option><option value="none">None</option><option value="ambulance">Ambulance</option><option value="fire_truck">Fire Truck</option></select></div>
+<div><label for="actualSignal">Correct signal phase</label><select id="actualSignal"><option value="">Select correct signal</option><option>Green</option><option>Yellow</option><option>Red</option></select></div>
+</div>
+<button type="button" id="saveValidationSampleBtn" onclick="saveValidationSample()">Save Human-Verified Sample</button>
+<p class="muted" id="validationSaveStatus">Start the camera in Auto mode before saving a validation sample.</p>
+</div>
 <div class="card"><h2>📊 Live Overall Result Confidence</h2>
 <div class="stats"><div class="stat">Current Camera Result<strong id="liveConfidence">{% if state.live_confidence is not none %}{{state.live_confidence}}%{% else %}Waiting for detections{% endif %}</strong></div>
 <div class="stat">Objects Evaluated<strong id="liveConfidenceSamples">{{state.live_confidence_samples}}</strong></div></div>
@@ -61,12 +85,39 @@ let cameraStream = null;
 let captureTimer = null;
 let processing = false;
 
+function renderOperationalEvaluation(evaluation) {
+  if (!evaluation) return;
+  const accuracy = document.getElementById('operationalAccuracy');
+  const samples = document.getElementById('operationalSamples');
+  const correct = document.getElementById('operationalCorrect');
+  const note = document.getElementById('operationalAccuracyNote');
+  if (accuracy) accuracy.textContent = evaluation.accuracy === null ? 'Not yet tested' : Number(evaluation.accuracy).toFixed(1) + '%';
+  if (samples) samples.textContent = (evaluation.total_samples || 0) + ' / ' + (evaluation.minimum_samples || 50);
+  if (correct) correct.textContent = evaluation.correct_samples || 0;
+  if (note) note.textContent = evaluation.accuracy === null
+    ? 'Collect ' + evaluation.remaining_samples + ' more independently labelled samples to unlock the overall exact-match percentage. This is not AI confidence.'
+    : 'Human-verified exact match: ' + evaluation.correct_samples + ' of ' + evaluation.total_samples + ' complete scene decisions matched all four labelled outputs.';
+  const components = evaluation.component_accuracy || {};
+  const show = (value) => value === null || value === undefined ? '—' : Number(value).toFixed(1) + '%';
+  document.getElementById('validationDensityAccuracy').textContent = show(components.density);
+  document.getElementById('validationDirectionAccuracy').textContent = show(components.direction);
+  document.getElementById('validationSignalAccuracy').textContent = show(components.signal);
+  document.getElementById('validationEmergencyAccuracy').textContent = show(evaluation.emergency_accuracy);
+  document.getElementById('emergencyValidationNote').textContent =
+    'Emergency validation cases: ' + evaluation.emergency_positive_samples + ' positive and ' + evaluation.emergency_negative_samples + ' negative. At least 5 of each are required before showing emergency-class accuracy.';
+}
+
 function render(s) {
   ['cars','bikes','buses','trucks','traffic','pedestrians','speed','density','queue_length','avg_waiting_time','active','green_time','countdown','updated','ml','mode']
     .forEach(k => {
       const e = document.getElementById(k);
       if (e && s[k] !== undefined) e.textContent = s[k];
     });
+
+  renderOperationalEvaluation(s.operational_evaluation);
+
+  const validationButton = document.getElementById('saveValidationSampleBtn');
+  if (validationButton) validationButton.disabled = s.mode !== 'Auto' || ['Not started', 'Camera stopped'].includes(s.updated_at);
 
   const confidence = document.getElementById('liveConfidence');
   if (confidence) confidence.textContent = s.live_confidence === null || s.live_confidence === undefined ? 'Waiting for detections' : Number(s.live_confidence).toFixed(1) + '%';
@@ -133,6 +184,38 @@ async function refresh() {
     const r = await fetch('/api/state', {cache:'no-store'});
     render(await r.json());
   } catch (e) {}
+}
+
+async function saveValidationSample() {
+  const status = document.getElementById('validationSaveStatus');
+  const payload = {
+    density: document.getElementById('actualDensity').value,
+    direction: document.getElementById('actualDirection').value,
+    emergency_type: document.getElementById('actualEmergency').value,
+    signal: document.getElementById('actualSignal').value
+  };
+  if (Object.values(payload).some(value => !value)) {
+    status.textContent = 'Please select all four independently verified values.';
+    return;
+  }
+  try {
+    const response = await fetch('/api/validation/sample', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Could not save validation sample');
+    renderOperationalEvaluation(data.evaluation);
+    status.textContent = data.message + ' Overall accuracy: ' +
+      (data.evaluation.accuracy === null ? 'collecting samples' : data.evaluation.accuracy + '%');
+    ['actualDensity','actualDirection','actualEmergency','actualSignal'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    await refresh();
+  } catch (error) {
+    status.textContent = 'Validation sample not saved: ' + error.message;
+  }
 }
 setInterval(refresh, 1500);
 refresh();

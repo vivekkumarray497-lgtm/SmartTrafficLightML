@@ -20,6 +20,8 @@ MODEL_PATH = os.path.join(BASE_DIR, "model", "random_forest_model.pkl")
 YOLO_MODEL_PATH = os.path.join(BASE_DIR, "yolo11n.pt")
 HISTORY_PATH = os.path.join(BASE_DIR, "data", "traffic_history.csv")
 POLICY_REPORT_PATH = os.path.join(BASE_DIR, "reports", "traffic_policy_evaluation.json")
+OPERATIONAL_VALIDATION_PATH = os.path.join(BASE_DIR, "data", "operational_validation.csv")
+OPERATIONAL_REPORT_PATH = os.path.join(BASE_DIR, "reports", "operational_evaluation.json")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
@@ -39,6 +41,7 @@ from vision_engine import VisionEngine
 from adaptive_controller import AdaptiveController
 from analytics_store import AnalyticsStore
 from emergency_detector import EmergencyDetector
+from operational_evaluation import OperationalEvaluator
 from camera_config import CAMERAS, ACTIVE_CAMERA_ID
 
 model = joblib.load(MODEL_PATH)
@@ -47,6 +50,11 @@ emergency_detector = EmergencyDetector()
 vision = VisionEngine(yolo_model, emergency_detector)
 controller = AdaptiveController()
 analytics = AnalyticsStore(HISTORY_PATH)
+operational_evaluator = OperationalEvaluator(
+    OPERATIONAL_VALIDATION_PATH,
+    OPERATIONAL_REPORT_PATH,
+    minimum_samples=50,
+)
 
 camera = None
 camera_source_id = None
@@ -382,6 +390,7 @@ def current_state():
         result["policy_model_name"] = POLICY_EVALUATION["model"]
         result["policy_model_status"] = POLICY_EVALUATION["status"]
         result["policy_model_metric"] = POLICY_EVALUATION["metric"]
+        result["operational_evaluation"] = operational_evaluator.summary()
         return result
 
 @app.route("/")
@@ -395,6 +404,43 @@ def video_feed():
 @app.route("/api/state")
 def api_state():
     return jsonify(current_state())
+
+@app.route("/api/validation/sample", methods=["POST"])
+def api_validation_sample():
+    payload = request.get_json(silent=True) or {}
+    if control_mode != "Auto":
+        return jsonify({"error": "Switch to Auto mode before recording an operational validation sample."}), 409
+
+    state = current_state()
+    if state.get("updated_at") in {"Not started", "Camera stopped"}:
+        return jsonify({"error": "Start a camera and process a frame before recording a sample."}), 409
+
+    try:
+        actual = {
+            "density": payload.get("density"),
+            "direction": payload.get("direction"),
+            "emergency_type": payload.get("emergency_type"),
+            "signal": payload.get("signal"),
+        }
+        predicted = {
+            "density": state.get("density"),
+            "direction": state.get("active_direction"),
+            "emergency_type": (
+                str(state.get("emergency_type", "")).lower().replace(" ", "_")
+                if state.get("emergency") else "none"
+            ),
+            "signal": state.get("signal"),
+        }
+        evaluation = operational_evaluator.record(predicted, actual)
+        return jsonify({
+            "message": "Human-verified validation sample saved.",
+            "evaluation": evaluation,
+        })
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError as exc:
+        app.logger.exception("Could not save operational validation sample")
+        return jsonify({"error": f"Could not save validation sample: {str(exc)[:120]}"}), 500
 
 @app.route("/api/health")
 def api_health():
