@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from collections import deque
 from ultralytics import YOLO, YOLOWorld
 
 class EmergencyDetector:
@@ -22,7 +23,7 @@ class EmergencyDetector:
     # same detections and can lower the score for the correct class.
     PROMPT_CLASSES = ["ambulance", "fire truck"]
 
-    def __init__(self, model_path=None, confidence=0.18, consecutive_required=2, miss_tolerance=2):
+    def __init__(self, model_path=None, confidence=0.12, consecutive_required=2, miss_tolerance=2):
         self.model_path = model_path or os.environ.get(
             "EMERGENCY_MODEL_PATH", "yolov8s-worldv2.pt"
         )
@@ -35,7 +36,11 @@ class EmergencyDetector:
 
         self.confidence = float(os.environ.get("EMERGENCY_CONF", confidence))
         self.consecutive_required = max(
-            1, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
+            2, int(os.environ.get("EMERGENCY_CONSECUTIVE", consecutive_required))
+        )
+        self.confirmation_window = max(
+            self.consecutive_required,
+            int(os.environ.get("EMERGENCY_CONFIRM_WINDOW", 4))
         )
         self.miss_tolerance = max(
             0, int(os.environ.get("EMERGENCY_MISS_TOLERANCE", miss_tolerance))
@@ -48,6 +53,7 @@ class EmergencyDetector:
 
         self._streak = 0
         self._misses = 0
+        self._recent_candidates = deque(maxlen=self.confirmation_window)
         self._last_type = ""
         self._last_direction = ""
         self._last_confidence = 0.0
@@ -132,14 +138,24 @@ class EmergencyDetector:
                 kept.append(candidate)
         return kept
 
-    def _empty(self):
+    def _empty(self, status="no_candidate"):
         return {
             "detected": False,
             "type": "",
             "direction": "",
             "confidence": 0.0,
+            "candidate_type": "",
+            "candidate_direction": "",
+            "candidate_confidence": 0.0,
+            "status": status,
             "detections": [],
         }
+
+    def _matching_history(self, label, direction):
+        return [
+            item for item in self._recent_candidates
+            if item is not None and item[0] == label and item[1] == direction
+        ]
 
     @staticmethod
     def _select_crop_boxes(traffic_boxes, limit):
@@ -157,7 +173,7 @@ class EmergencyDetector:
             reverse=True,
         )[:max(0, int(limit))]
 
-    def _predict(self, image, confidence=None, imgsz=800):
+    def _predict(self, image, confidence=None, imgsz=960):
         # Crop inference can use a lower threshold because the vehicle occupies
         # more of the pixels. Full-frame inference keeps the configured threshold.
         return self.model.predict(
@@ -242,8 +258,8 @@ class EmergencyDetector:
                     crop = frame[cy1:cy2, cx1:cx2]
                     crop_result = self._predict(
                         crop,
-                        confidence=min(self.confidence, 0.07),
-                        imgsz=1024,
+                        confidence=min(self.confidence, 0.05),
+                        imgsz=1280,
                     )
                     results_to_parse.append((crop_result, cx1, cy1))
 
@@ -296,13 +312,18 @@ class EmergencyDetector:
             candidates = self._deduplicate(candidates)
 
             if not candidates:
+                self._recent_candidates.append(None)
                 self._misses += 1
-                if self._misses <= self.miss_tolerance and self._streak >= self.consecutive_required:
+                if self._misses <= self.miss_tolerance and self._last_type:
                     return {
                         "detected": True,
                         "type": self._last_type,
                         "direction": self._last_direction,
                         "confidence": self._last_confidence,
+                        "candidate_type": "",
+                        "candidate_direction": "",
+                        "candidate_confidence": 0.0,
+                        "status": "confirmed_hold",
                         "detections": [],
                     }
 
@@ -310,24 +331,32 @@ class EmergencyDetector:
                 self._last_type = ""
                 self._last_direction = ""
                 self._last_confidence = 0.0
+                self._recent_candidates.clear()
                 return self._empty()
 
             best = max(candidates, key=lambda item: item["confidence"])
             self._misses = 0
 
-            if (
-                best["label"] == self._last_type
-                and best["direction"] == self._last_direction
+            if self._last_type and (
+                best["label"] != self._last_type
+                or best["direction"] != self._last_direction
             ):
-                self._streak += 1
-            else:
-                self._streak = 1
+                self._last_type = ""
+                self._last_direction = ""
+                self._last_confidence = 0.0
 
-            self._last_type = best["label"]
-            self._last_direction = best["direction"]
-            self._last_confidence = best["confidence"]
-
+            self._recent_candidates.append(
+                (best["label"], best["direction"], best["confidence"])
+            )
+            matching = self._matching_history(best["label"], best["direction"])
+            self._streak = len(matching)
             confirmed = self._streak >= self.consecutive_required
+
+            if confirmed:
+                self._last_type = best["label"]
+                self._last_direction = best["direction"]
+                self._last_confidence = sum(item[2] for item in matching) / len(matching)
+
             for candidate in candidates:
                 candidate["confirmed"] = bool(
                     confirmed
@@ -338,7 +367,11 @@ class EmergencyDetector:
                 "detected": confirmed,
                 "type": best["label"] if confirmed else "",
                 "direction": best["direction"] if confirmed else "",
-                "confidence": best["confidence"] if confirmed else 0.0,
+                "confidence": self._last_confidence if confirmed else 0.0,
+                "candidate_type": best["label"],
+                "candidate_direction": best["direction"],
+                "candidate_confidence": best["confidence"],
+                "status": "confirmed" if confirmed else "confirming",
                 "detections": candidates,
             }
 
@@ -353,4 +386,5 @@ class EmergencyDetector:
             self._last_type = ""
             self._last_direction = ""
             self._last_confidence = 0.0
-            return self._empty()
+            self._recent_candidates.clear()
+            return self._empty("model_error")
