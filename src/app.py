@@ -55,6 +55,8 @@ CONTROLLED_POST_PATHS = {
     "/api/camera/reset",
     "/api/cameras/select",
     "/api/control",
+    "/api/frame",
+    "/api/validation/sample",
 }
 
 @app.context_processor
