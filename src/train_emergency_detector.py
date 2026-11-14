@@ -105,8 +105,12 @@ def main():
         verbose=True,
     )
 
-    run_dir = Path(training.save_dir)
-    best_weights = run_dir / "weights" / "best.pt"
+    trainer = getattr(base_model, "trainer", None)
+    if trainer is None:
+        raise RuntimeError("Ultralytics did not expose its training results.")
+
+    run_dir = Path(trainer.save_dir)
+    best_weights = Path(trainer.best) if getattr(trainer, "best", None) else run_dir / "weights" / "best.pt"
     if not best_weights.is_file():
         raise FileNotFoundError(f"Training did not produce best.pt: {best_weights}")
 
