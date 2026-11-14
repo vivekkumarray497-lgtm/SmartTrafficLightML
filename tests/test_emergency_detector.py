@@ -22,9 +22,11 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertNotIn(label, EmergencyDetector.PROMPT_CLASSES)
 
-    def test_default_emergency_confidence_is_not_forced_to_very_low_value(self):
+    def test_default_emergency_confidence_allows_small_vehicle_candidates(self):
         detector = EmergencyDetector()
-        self.assertAlmostEqual(detector.confidence, 0.18)
+        self.assertAlmostEqual(detector.confidence, 0.12)
+        self.assertEqual(detector.confirmation_window, 4)
+        self.assertEqual(detector.consecutive_required, 2)
 
     def test_only_ambulance_and_fire_vehicle_labels_are_emergency(self):
         self.assertEqual(EmergencyDetector._label("emergency ambulance"), "ambulance")
@@ -77,9 +79,9 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
 
         detector = EmergencyDetector(confidence=0.18)
         detector.model = FakeModel()
-        detector._predict("crop-image", confidence=min(detector.confidence, 0.07), imgsz=1024)
-        self.assertAlmostEqual(detector.model.kwargs["conf"], 0.07)
-        self.assertEqual(detector.model.kwargs["imgsz"], 1024)
+        detector._predict("crop-image", confidence=min(detector.confidence, 0.05), imgsz=1280)
+        self.assertAlmostEqual(detector.model.kwargs["conf"], 0.05)
+        self.assertEqual(detector.model.kwargs["imgsz"], 1280)
         self.assertFalse(detector.model.kwargs["verbose"])
 
     def test_crop_selection_checks_multiple_vehicle_boxes_by_default_limit(self):
@@ -106,6 +108,30 @@ class EmergencyDetectorUnitTests(unittest.TestCase):
         ]
         selected = EmergencyDetector._select_crop_boxes(boxes, 2)
         self.assertEqual([item["class_id"] for item in selected], [5, 7])
+
+    def test_candidate_history_confirms_after_two_hits_even_with_one_missed_frame(self):
+        detector = EmergencyDetector()
+        detector._recent_candidates.extend([
+            ("ambulance", "North", 0.42),
+            None,
+            ("ambulance", "North", 0.51),
+        ])
+        self.assertEqual(len(detector._matching_history("ambulance", "North")), 2)
+
+    def test_one_candidate_is_not_enough_to_trigger_priority(self):
+        detector = EmergencyDetector()
+        detector._recent_candidates.append(("ambulance", "North", 0.62))
+        self.assertEqual(len(detector._matching_history("ambulance", "North")), 1)
+        self.assertLess(len(detector._matching_history("ambulance", "North")), detector.consecutive_required)
+
+    def test_different_emergency_categories_do_not_confirm_each_other(self):
+        detector = EmergencyDetector()
+        detector._recent_candidates.extend([
+            ("ambulance", "North", 0.55),
+            ("fire truck", "North", 0.61),
+        ])
+        self.assertEqual(len(detector._matching_history("ambulance", "North")), 1)
+        self.assertEqual(len(detector._matching_history("fire truck", "North")), 1)
 
     def test_direction_uses_frame_quadrants(self):
         self.assertEqual(EmergencyDetector._direction(90, 50, 200, 100), "West")
