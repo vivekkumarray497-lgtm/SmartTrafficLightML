@@ -60,6 +60,14 @@ jobs:
           assert csrf_rejected.status_code == 403, csrf_rejected.data.decode()
           control_rejected = client.post("/api/camera/reset", headers=csrf_headers)
           assert control_rejected.status_code == 403, control_rejected.data.decode()
+          frame_control_rejected = client.post(
+              "/api/frame", json={}, headers=csrf_headers
+          )
+          assert frame_control_rejected.status_code == 403, frame_control_rejected.data.decode()
+          validation_control_rejected = client.post(
+              "/api/validation/sample", json={}, headers=csrf_headers
+          )
+          assert validation_control_rejected.status_code == 403, validation_control_rejected.data.decode()
 
           health = client.get("/api/health")
           assert health.status_code == 200, health.data.decode()
@@ -109,7 +117,7 @@ jobs:
           image.save(buf, format="JPEG")
           payload = base64.b64encode(buf.getvalue()).decode("ascii")
 
-          frame = client.post("/api/frame", json={"image": payload}, headers=csrf_headers)
+          frame = client.post("/api/frame", json={"image": payload}, headers=control_headers)
           assert frame.status_code == 200, frame.data.decode()
           assert frame.get_json()["traffic"] == 1
 
