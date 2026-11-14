@@ -367,7 +367,7 @@ async function sendFrame() {
   try {
     const r = await fetch('/api/frame', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: csrfHeaders({'Content-Type': 'application/json'}),
       body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.72), direction: document.getElementById('browserCameraDirection').value})
     });
 
@@ -449,7 +449,7 @@ async function clearEmergency() {
   try {
     const r = await fetch('/api/control', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:csrfHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify({emergency:false})
     });
     render(await r.json());
