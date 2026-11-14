@@ -200,3 +200,7 @@ export COOKIE_SECURE=1
 ```
 
 The PIN is a shared bearer secret, not individual user accounts, roles, audit identity or a full authentication system. Do not expose control routes publicly or connect this academic prototype to live road hardware without a separately managed authenticated control plane, access controls, fail-safe interlocks and qualified safety review.
+
+## Model training workflow
+
+The GitHub Actions **Train and evaluate traffic models** workflow is manual-only. Run it from the repository Actions tab when you intentionally want to retrain the tabular models. It uploads the evaluation reports, trained `.pkl` files and generated policy-training CSV as an artifact; it does not commit model binaries back to `main`. The YOLO vehicle/emergency training scripts remain Colab/GPU workflows and require a private Roboflow API key.
