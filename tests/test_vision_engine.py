@@ -30,6 +30,10 @@ class FakeModel:
         self.kwargs = kwargs
         return [self.result]
 
+    def predict(self, frame, **kwargs):
+        self.predict_kwargs = kwargs
+        return [self.result]
+
 
 class VisionEngineTests(unittest.TestCase):
     def test_vehicle_confidence_excludes_pedestrian_and_emergency_scores(self):
@@ -61,7 +65,7 @@ class VisionEngineTests(unittest.TestCase):
         self.assertAlmostEqual(model.kwargs["conf"], 0.18)
         self.assertEqual(model.kwargs["imgsz"], 960)
         self.assertEqual(model.kwargs["max_det"], 500)
-        self.assertEqual(model.kwargs["classes"], [0, 2, 3, 5, 7])
+        self.assertEqual(model.kwargs["classes"], [0, 1, 2, 3, 5, 7])
 
     def test_custom_four_class_model_maps_its_own_class_ids(self):
         model = FakeModel(
@@ -83,6 +87,45 @@ class VisionEngineTests(unittest.TestCase):
         self.assertEqual(metrics["total_vehicles"], 4)
         self.assertEqual(model.kwargs["classes"], [0, 1, 2, 3])
 
+    def test_custom_model_counts_auto_rickshaws_separately(self):
+        model = FakeModel(
+            [
+                FakeBox(0, 0.91, [10, 100, 110, 220]),
+                FakeBox(1, 0.88, [120, 100, 220, 220]),
+                FakeBox(2, 0.86, [230, 100, 360, 250]),
+                FakeBox(3, 0.84, [370, 100, 520, 260]),
+                FakeBox(4, 0.90, [520, 100, 630, 250]),
+            ],
+            names={
+                0: "car", 1: "bike", 2: "bus", 3: "truck",
+                4: "auto_rickshaw",
+            },
+        )
+        engine = VisionEngine(model)
+        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertEqual(metrics["cars"], 1)
+        self.assertEqual(metrics["bikes"], 1)
+        self.assertEqual(metrics["buses"], 1)
+        self.assertEqual(metrics["trucks"], 1)
+        self.assertEqual(metrics["auto_rickshaws"], 1)
+        self.assertEqual(metrics["total_vehicles"], 5)
+
+    def test_custom_vehicle_model_uses_coco_person_model_for_pedestrians(self):
+        vehicle_model = FakeModel(
+            [FakeBox(0, 0.91, [100, 100, 220, 220])],
+            names={0: "car", 1: "bike", 2: "bus", 3: "truck", 4: "auto_rickshaw"},
+        )
+        person_model = FakeModel([FakeBox(0, 0.93, [20, 20, 70, 100])])
+        engine = VisionEngine(vehicle_model, person_model=person_model)
+        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertEqual(metrics["cars"], 1)
+        self.assertEqual(metrics["pedestrians"], 1)
+        self.assertEqual(metrics["vehicle_confidence"], 91.0)
+        self.assertEqual(metrics["pedestrian_confidence"], 93.0)
+        self.assertEqual(person_model.predict_kwargs["classes"], [0])
+
     def test_custom_model_can_keep_person_class_separate(self):
         model = FakeModel(
             [
@@ -99,6 +142,7 @@ class VisionEngineTests(unittest.TestCase):
         self.assertEqual(metrics["vehicle_confidence"], 91.0)
         self.assertEqual(metrics["pedestrian_confidence"], 93.0)
         self.assertEqual(model.kwargs["classes"], [0, 1, 2, 3, 4])
+
     def test_invalid_environment_settings_fall_back_safely(self):
         with patch.dict("os.environ", {
             "TRAFFIC_DETECTION_CONF": "bad",
