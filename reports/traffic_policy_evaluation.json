@@ -1,0 +1,134 @@
+{
+  "generated_at_utc": "2026-11-14T15:21:22+00:00",
+  "evaluation_type": "held_out_policy_agreement",
+  "metric_name": "Traffic priority policy agreement",
+  "dataset_rows_used": 2000,
+  "train_samples": 1600,
+  "test_samples": 400,
+  "split": "chronological first 80% for training, final 20% for testing",
+  "selected_model": "ExtraTrees",
+  "test_policy_agreement": 0.955,
+  "test_macro_f1": 0.9561,
+  "majority_baseline_agreement": 0.44,
+  "class_distribution": {
+    "LOW": 590,
+    "MEDIUM": 894,
+    "HIGH": 516
+  },
+  "training_class_distribution": {
+    "LOW": 476,
+    "MEDIUM": 718,
+    "HIGH": 406
+  },
+  "test_class_distribution": {
+    "LOW": 114,
+    "MEDIUM": 176,
+    "HIGH": 110
+  },
+  "cross_validation": {
+    "ExtraTrees": {
+      "mean_accuracy": 0.9308,
+      "std_accuracy": 0.0287
+    },
+    "RandomForest": {
+      "mean_accuracy": 0.9203,
+      "std_accuracy": 0.0241
+    },
+    "GradientBoosting": {
+      "mean_accuracy": 0.8902,
+      "std_accuracy": 0.0589
+    },
+    "HistGradientBoosting": {
+      "mean_accuracy": 0.9128,
+      "std_accuracy": 0.0383
+    }
+  },
+  "feature_importance": {
+    "flow_pressure": 0.197364,
+    "traffic_volume": 0.191821,
+    "vehicle_load_pressure": 0.125085,
+    "avg_vehicle_speed": 0.120631,
+    "vehicle_total": 0.120069,
+    "speed_pressure": 0.118483,
+    "vehicle_count_cars": 0.099686,
+    "vehicle_count_trucks": 0.013518,
+    "vehicle_count_bikes": 0.013343
+  },
+  "classification_report": {
+    "LOW": {
+      "precision": 0.9416666666666667,
+      "recall": 0.9912280701754386,
+      "f1-score": 0.9658119658119658,
+      "support": 114.0
+    },
+    "MEDIUM": {
+      "precision": 0.9593023255813954,
+      "recall": 0.9375,
+      "f1-score": 0.9482758620689655,
+      "support": 176.0
+    },
+    "HIGH": {
+      "precision": 0.9629629629629629,
+      "recall": 0.9454545454545454,
+      "f1-score": 0.9541284403669725,
+      "support": 110.0
+    },
+    "accuracy": 0.955,
+    "macro avg": {
+      "precision": 0.9546439850703416,
+      "recall": 0.9580608718766613,
+      "f1-score": 0.9560720894159679,
+      "support": 400.0
+    },
+    "weighted avg": {
+      "precision": 0.9552828380706287,
+      "recall": 0.955,
+      "f1-score": 0.9548831106676725,
+      "support": 400.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      113,
+      1,
+      0
+    ],
+    [
+      7,
+      165,
+      4
+    ],
+    [
+      0,
+      6,
+      104
+    ]
+  ],
+  "policy": {
+    "name": "Traffic pressure priority policy",
+    "flow_pressure": "clip(traffic_volume / 1000, 0, 1)",
+    "vehicle_load_pressure": "clip((cars + trucks + bikes) / 1200, 0, 1)",
+    "speed_pressure": "clip((80 - average_speed) / 60, 0, 1)",
+    "traffic_pressure_index": "0.40 * flow_pressure + 0.40 * vehicle_load_pressure + 0.20 * speed_pressure",
+    "LOW": "index < 0.4",
+    "MEDIUM": "0.4 <= index < 0.6",
+    "HIGH": "index >= 0.6"
+  },
+  "features": [
+    "flow_pressure",
+    "vehicle_load_pressure",
+    "speed_pressure",
+    "traffic_volume",
+    "avg_vehicle_speed",
+    "vehicle_count_cars",
+    "vehicle_count_trucks",
+    "vehicle_count_bikes",
+    "vehicle_total"
+  ],
+  "limitations": [
+    "Priority labels are generated from the documented policy, not manually observed road outcomes.",
+    "The score measures how well the ML model reproduces this policy on later records.",
+    "It is not live-camera detection accuracy, signal safety validation, or proof of real-world traffic improvement.",
+    "Operational validation requires independently labelled traffic observations and field testing."
+  ]
+}
