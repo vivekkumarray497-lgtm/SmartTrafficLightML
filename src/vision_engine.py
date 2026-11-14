@@ -3,7 +3,10 @@ import os
 import time
 import math
 import numpy as np
-from traffic_density import calculate_traffic_density
+try:
+    from .traffic_density import calculate_traffic_density
+except ImportError:
+    from traffic_density import calculate_traffic_density
 from collections import defaultdict, deque
 
 class VisionEngine:
