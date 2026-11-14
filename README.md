@@ -153,7 +153,7 @@ For the final camera demo, verify the behavior with a clear ambulance clip, a fi
 
 ## Emergency detector training
 
-The current emergency fallback uses YOLO-World, which is a zero-shot open-vocabulary detector. Its confidence score is not a measured accuracy percentage. For a dedicated emergency model, fine-tune the repository's YOLO11n weights using the public Roboflow **Fire Truck & Ambulance Detection** dataset (version 2, 1,043 labelled images, CC BY 4.0). Dataset attribution: **s Workspace**. Dataset page: https://universe.roboflow.com/s-workspace-kc9f0/fire-truck-ambulance-detection
+The current emergency fallback uses YOLO-World, which is a zero-shot open-vocabulary detector. Its confidence score is not a measured accuracy percentage. For a dedicated emergency model, fine-tune the repository's YOLO11n weights using the public Roboflow **Fire Truck & Ambulance Detection** dataset (version 5, 2,456 labelled images (1,720 train, 491 validation and 245 test images), CC BY 4.0). Dataset attribution: **s Workspace**. Dataset page: https://universe.roboflow.com/s-workspace-kc9f0/fire-truck-ambulance-detection
 
 The training script keeps ambulance, fire-truck, police-car, towing-truck and normal-vehicle labels separate; only ambulance and fire-truck are mapped to emergency priority by the application.
 
