@@ -138,12 +138,20 @@ def main():
     report = {
         "generated_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "dataset_rows_used": int(len(X)),
+        "signal_class_distribution": {SIGNAL_NAMES[int(label)]: int(count) for label, count in y.value_counts().sort_index().items()},
         "train_samples": int(len(X_train)),
         "test_samples": int(len(X_test)),
         "split": "stratified 80/20, random_state=42",
         "majority_baseline_accuracy": round(float(majority_accuracy), 4),
         "previous_model_holdout_accuracy": None if previous_accuracy is None else round(float(previous_accuracy), 4),
         "best_candidate_by_training_cv": best_name,
+        "selected_estimator": type(best_model).__name__,
+        "feature_importance": (
+            {name: round(float(score), 6) for name, score in sorted(
+                zip(FEATURES, best_model.feature_importances_), key=lambda item: item[1], reverse=True
+            )}
+            if hasattr(best_model, "feature_importances_") else {}
+        ),
         "candidate_holdout_accuracy": round(float(candidate_accuracy), 4),
         "active_model_holdout_accuracy": round(float(active_accuracy), 4),
         "promoted_candidate": bool(promoted),
