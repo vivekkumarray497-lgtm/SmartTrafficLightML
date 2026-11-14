@@ -123,6 +123,8 @@ camera_source_id = None
 frame_session_id = uuid.uuid4().hex
 frame_sequence = 0
 frame_observations = OrderedDict()
+last_browser_frame_at = 0.0
+camera_loss_latched = False
 active_camera_id = ACTIVE_CAMERA_ID
 _initial_camera = next((item for item in CAMERAS if str(item.get("id")) == str(ACTIVE_CAMERA_ID)), None)
 active_camera_direction = (_initial_camera or {}).get("direction", "North")
@@ -554,15 +556,31 @@ def reset_state():
 
 
 def generate_frames():
+    global camera_loss_latched
     while True:
         cap = get_camera()
         if cap is None or not cap.isOpened():
+            with state_lock:
+                browser_recent = time.time() - last_browser_frame_at <= 3.0
+            if browser_recent:
+                camera_loss_latched = False
+            elif not camera_loss_latched:
+                reset_state()
+                camera_loss_latched = True
             time.sleep(0.5)
             continue
         success, frame = cap.read()
         if not success:
+            with state_lock:
+                browser_recent = time.time() - last_browser_frame_at <= 3.0
+            if browser_recent:
+                camera_loss_latched = False
+            elif not camera_loss_latched:
+                reset_state()
+                camera_loss_latched = True
             time.sleep(0.05)
             continue
+        camera_loss_latched = False
         try:
             frame = detect_frame(frame, camera_direction=active_camera_direction)
         except Exception as exc:
@@ -735,10 +753,23 @@ def api_mode():
     control_mode = requested_mode
     signal_started_at = time.time()
     last_signal_key = None
-    update_state(_current_metrics_snapshot())
+    with state_lock:
+        has_live_frame = bool(traffic_data.get("frame_id")) and traffic_data.get(
+            "updated_at"
+        ) not in {"Not started", "Camera stopped"}
+        traffic_data["mode"] = control_mode
+        if not has_live_frame:
+            traffic_data["signal"] = "All Red"
+            traffic_data["signal_message"] = "WAITING FOR VALID CAMERA FRAME - ALL-RED SAFE HOLD"
+    if has_live_frame:
+        update_state(_current_metrics_snapshot())
     return jsonify({
         "mode": control_mode,
-        "message": f"{control_mode} mode enabled with safe signal clearance."
+        "message": (
+            f"{control_mode} mode enabled with safe signal clearance."
+            if has_live_frame else
+            f"{control_mode} mode enabled. Signals remain All Red until a valid camera frame arrives."
+        )
     })
 
 @app.route("/api/manual-control", methods=["POST"])
@@ -750,6 +781,12 @@ def api_manual_control():
         return jsonify({"error": "Direction must be North, South, East, or West."}), 400
     if control_mode != "Manual":
         return jsonify({"error": "Switch to Manual mode before setting a signal."}), 409
+    with state_lock:
+        has_live_frame = bool(traffic_data.get("frame_id")) and traffic_data.get(
+            "updated_at"
+        ) not in {"Not started", "Camera stopped"}
+    if not has_live_frame:
+        return jsonify({"error": "Start a camera first. Signal remains All Red until a valid frame arrives."}), 409
     manual_direction = requested_direction
     signal_started_at = time.time()
     last_signal_key = None
@@ -766,6 +803,7 @@ def api_manual_control():
 
 @app.route("/api/frame", methods=["POST"])
 def api_frame():
+    global last_browser_frame_at, camera_loss_latched
     payload = request.get_json(silent=True) or {}
     image_data = payload.get("image")
 
@@ -779,6 +817,8 @@ def api_frame():
         frame = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
             raise ValueError("Invalid JPEG frame")
+        last_browser_frame_at = time.time()
+        camera_loss_latched = False
 
         requested_direction = str(payload.get("direction", active_camera_direction)).title()
         if requested_direction not in DIRECTIONS:
@@ -839,6 +879,7 @@ def api_camera_select():
             camera.release()
             camera = None
         camera_source_id = None
+    reset_state()
     return jsonify({
         "active_camera_id": active_camera_id,
         "camera_direction": active_camera_direction,
@@ -862,6 +903,13 @@ def api_control():
         emergency_direction = ""
 
     with state_lock:
+        has_live_frame = bool(traffic_data.get("frame_id")) and traffic_data.get(
+            "updated_at"
+        ) not in {"Not started", "Camera stopped"}
+        if not has_live_frame:
+            return jsonify({
+                "error": "Start a camera first. Emergency controls remain disabled during the All-Red safe hold."
+            }), 409
         metrics = {
             "cars": traffic_data["cars"],
             "bikes": traffic_data["bikes"],
