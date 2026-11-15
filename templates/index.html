@@ -429,8 +429,14 @@ async function saveValidationSample() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Could not save validation sample');
     renderOperationalEvaluation(data.evaluation);
+    const training = data.training_data || {};
+    const trainingStatus = training.saved
+      ? ' Verified camera training samples: ' + Number(training.total_samples || 0) +
+        ' across ' + Number(training.sessions || 0) + ' separate camera session(s).'
+      : ' Camera training copy not saved: ' + (training.error || 'check the server log') + '.';
     status.textContent = data.message + ' Overall accuracy: ' +
-      (data.evaluation.accuracy === null ? 'collecting samples' : data.evaluation.accuracy + '%');
+      (data.evaluation.accuracy === null ? 'collecting samples' : data.evaluation.accuracy + '%') +
+      trainingStatus;
     ['actualDensity','actualDirection','actualEmergency','actualSignal'].forEach(id => {
       document.getElementById(id).value = '';
     });
