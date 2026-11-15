@@ -30,28 +30,28 @@ class VisionEngine:
         self.tile_model_lock = threading.Lock()
         self.vehicle_classes, self.person_classes = self._resolve_model_classes(model)
         try:
-            self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.18"))
+            self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.22"))
         except ValueError:
-            self.confidence_threshold = 0.18
+            self.confidence_threshold = 0.22
         self.confidence_threshold = min(0.95, max(0.05, self.confidence_threshold))
         try:
-            self.image_size = int(os.environ.get("TRAFFIC_IMAGE_SIZE", "1280"))
+            self.image_size = int(os.environ.get("TRAFFIC_IMAGE_SIZE", "960"))
         except ValueError:
-            self.image_size = 1280
+            self.image_size = 960
         self.image_size = min(1280, max(640, self.image_size))
         try:
-            self.nms_iou_threshold = float(os.environ.get("TRAFFIC_DETECTION_IOU", "0.65"))
+            self.nms_iou_threshold = float(os.environ.get("TRAFFIC_DETECTION_IOU", "0.50"))
         except ValueError:
-            self.nms_iou_threshold = 0.65
+            self.nms_iou_threshold = 0.50
         self.nms_iou_threshold = min(0.90, max(0.30, self.nms_iou_threshold))
         try:
-            self.max_detections = int(os.environ.get("TRAFFIC_MAX_DETECTIONS", "1000"))
+            self.max_detections = int(os.environ.get("TRAFFIC_MAX_DETECTIONS", "500"))
         except ValueError:
-            self.max_detections = 1000
+            self.max_detections = 500
         self.max_detections = min(2000, max(100, self.max_detections))
 
         tiled_setting_enabled = os.environ.get(
-            "TRAFFIC_TILED_INFERENCE", "1"
+            "TRAFFIC_TILED_INFERENCE", "0"
         ).strip().lower() not in {"0", "false", "no", "off"}
         self.tiled_inference_enabled = tiled_setting_enabled and (
             self.tile_model is not None or callable(self.tile_model_factory)
