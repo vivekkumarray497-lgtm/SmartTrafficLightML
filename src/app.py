@@ -9,7 +9,6 @@ import sys
 import cv2
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score
 import threading
 import time
 import uuid
@@ -191,48 +190,56 @@ traffic_data = {
 }
 
 def evaluate_model_accuracy():
-    """Evaluate the saved Random Forest on the same held-out split used by the project notebook."""
-    dataset_path = os.path.join(BASE_DIR, "dataset", "cleaned_traffic_data.csv")
+    """Read only a model score produced by the leakage-safe training protocol."""
+    report_path = os.path.join(BASE_DIR, "reports", "model_evaluation.json")
     try:
-        df = pd.read_csv(dataset_path)
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df["hour"] = df["timestamp"].dt.hour
-        df["minute"] = df["timestamp"].dt.minute
-        df["day"] = df["timestamp"].dt.day
-        df["month"] = df["timestamp"].dt.month
-        df["weather_condition"] = df["weather_condition"].map(weather_mapping)
-        df["signal_status"] = df["signal_status"].map({"Red": 0, "Yellow": 1, "Green": 2})
-        features = [
-            "location_id", "traffic_volume", "avg_vehicle_speed",
-            "vehicle_count_cars", "vehicle_count_trucks", "vehicle_count_bikes",
-            "weather_condition", "temperature", "humidity", "accident_reported",
-            "hour", "minute", "day", "month"
-        ]
-        evaluation = (
-            df[features + ["signal_status", "timestamp"]]
-            .dropna()
-            .sort_values("timestamp")
-            .reset_index(drop=True)
+        with open(report_path, "r", encoding="utf-8") as handle:
+            report = json.load(handle)
+
+        is_validated = (
+            report.get("evaluation_protocol_version") == "chronological_holdout_v2"
+            and report.get("active_model_evaluation_status")
+            == "validated_chronological_holdout"
+            and report.get("active_model_holdout_accuracy") is not None
         )
-        X = evaluation[features]
-        y = evaluation["signal_status"].astype(int)
-        split_index = int(len(evaluation) * 0.80)
-        X_test = X.iloc[split_index:]
-        y_test = y.iloc[split_index:]
-        accuracy = float(accuracy_score(y_test, model.predict(X_test)) * 100)
+        if not is_validated:
+            return {
+                "accuracy": None,
+                "samples": int(report.get("test_samples", 0) or 0),
+                "candidate_accuracy": (
+                    round(float(report["candidate_holdout_accuracy"]) * 100, 1)
+                    if report.get("evaluation_protocol_version") == "chronological_holdout_v2"
+                    and report.get("candidate_holdout_accuracy") is not None else None
+                ),
+                "baseline_accuracy": (
+                    round(float(report["majority_baseline_accuracy"]) * 100, 1)
+                    if report.get("evaluation_protocol_version") == "chronological_holdout_v2"
+                    and report.get("majority_baseline_accuracy") is not None else None
+                ),
+                "candidate_model": report.get("best_candidate_by_training_cv", "Unavailable"),
+                "status": "unavailable",
+                "method": "The saved legacy model has no leakage-safe chronological training record.",
+            }
+
         return {
-            "accuracy": round(accuracy, 1),
-            "samples": int(len(y_test)),
+            "accuracy": round(float(report["active_model_holdout_accuracy"]) * 100, 1),
+            "samples": int(report.get("test_samples", 0)),
+            "candidate_accuracy": round(float(report["candidate_holdout_accuracy"]) * 100, 1),
+            "baseline_accuracy": round(float(report["majority_baseline_accuracy"]) * 100, 1),
+            "candidate_model": report.get("best_candidate_by_training_cv", "Unavailable"),
             "status": "available",
-            "method": "Chronological held-out test split (final 20%)"
+            "method": "Chronological holdout; training uses only the first 80% of timestamps.",
         }
-    except Exception as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         print(f"Model accuracy evaluation unavailable: {exc}")
         return {
             "accuracy": None,
             "samples": 0,
+            "candidate_accuracy": None,
+            "baseline_accuracy": None,
+            "candidate_model": "Unavailable",
             "status": "unavailable",
-            "method": "Evaluation dataset unavailable"
+            "method": "No leakage-safe model evaluation report is available.",
         }
 
 MODEL_EVALUATION = evaluate_model_accuracy()
@@ -712,6 +719,9 @@ def current_state():
         result["model_accuracy_samples"] = MODEL_EVALUATION["samples"]
         result["model_accuracy_status"] = MODEL_EVALUATION["status"]
         result["model_accuracy_method"] = MODEL_EVALUATION["method"]
+        result["model_candidate_accuracy"] = MODEL_EVALUATION["candidate_accuracy"]
+        result["model_baseline_accuracy"] = MODEL_EVALUATION["baseline_accuracy"]
+        result["model_candidate_name"] = MODEL_EVALUATION["candidate_model"]
         result["policy_model_agreement"] = POLICY_EVALUATION["agreement"]
         result["policy_model_samples"] = POLICY_EVALUATION["samples"]
         result["policy_model_name"] = POLICY_EVALUATION["model"]
