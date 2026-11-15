@@ -53,6 +53,12 @@
 </div>
 <div class="bar" aria-label="Overall validation sample progress"><span id="operationalProgress" style="width:{{ [100 * state.operational_evaluation.total_samples / state.operational_evaluation.minimum_samples, 100]|min }}%"></span></div>
 <p class="muted" id="operationalAccuracyNote">Overall exact match checks whether density, priority direction, emergency class and signal phase are all correct for the same camera frame. The score unlocks after {{state.operational_evaluation.minimum_samples}} complete human-reviewed frames.</p>
+<h3>Live AI activity</h3>
+<div class="stats">
+<div class="stat">AI Frames Processed<strong id="liveFramesProcessed">{{state.frames_processed}}</strong></div>
+<div class="stat">Vehicles in Latest Frame<strong id="liveVehiclesDetected">{{state.traffic}}</strong></div>
+</div>
+<p class="muted" id="liveAccuracyActivityNote">These live counters update automatically as the camera is processed. They are detection activity, not verified accuracy.</p>
 <h3>Component-wise results</h3>
 <div class="stats">
 <div class="stat">Traffic Density<strong id="validationDensityAccuracy">—</strong></div>
@@ -68,6 +74,7 @@
 </div>
 <div class="card"><h2>🧾 Validate This Camera Result</h2>
 <p class="muted">Independently inspect the processed camera frame. Select what a human reviewer considers correct, not what the AI displays. Each unique captured frame can be submitted only once; the saved prediction is tied to that exact frame.</p>
+<p class="muted">A vehicle detection updates the live counters automatically, but it does not increase Verified Frames. To measure accuracy, compare all four AI outputs with the real scene and click Save Human-Verified Sample. Never copy the AI prediction into the actual-answer fields without checking it.</p>
 <div class="row">
 <div><label for="actualDensity">Verified traffic density</label><select id="actualDensity"><option value="">Select actual density</option><option>NO TRAFFIC</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>VERY HIGH</option></select></div>
 <div><label for="actualDirection">Correct priority direction</label><select id="actualDirection"><option value="">Select correct direction</option><option>North</option><option>South</option><option>East</option><option>West</option></select></div>
@@ -231,6 +238,23 @@ function renderOperationalEvaluation(evaluation) {
   }
 }
 
+function renderLiveCameraActivity(state) {
+  const frames = document.getElementById('liveFramesProcessed');
+  const vehicles = document.getElementById('liveVehiclesDetected');
+  const note = document.getElementById('liveAccuracyActivityNote');
+  if (frames) frames.textContent = Number(state.frames_processed || 0).toLocaleString();
+  if (vehicles) vehicles.textContent = Number(state.traffic || 0).toLocaleString();
+
+  if (note) {
+    const hasFrame = Boolean(state.frame_id) &&
+      !['Not started', 'Camera stopped'].includes(state.updated_at);
+    note.textContent = hasFrame
+      ? 'Live camera is processing frames. ' + Number(state.traffic || 0) +
+        ' vehicle(s) in the latest processed frame. These detections do not count as human-verified accuracy samples.'
+      : 'Waiting for a processed camera frame. When a vehicle is detected, the live counters update automatically; accuracy requires independent human verification.';
+  }
+}
+
 function render(s) {
   latestSceneId = String(s.frame_id || '');
   ['cars','bikes','buses','trucks','auto_rickshaws','traffic','pedestrians','speed','density','queue_length','avg_waiting_time','active','green_time','countdown','updated','ml','mode']
@@ -240,6 +264,7 @@ function render(s) {
     });
 
   renderOperationalEvaluation(s.operational_evaluation);
+  renderLiveCameraActivity(s);
 
   const validationButton = document.getElementById('saveValidationSampleBtn');
   if (validationButton) validationButton.disabled = s.mode !== 'Auto' || ['Not started', 'Camera stopped'].includes(s.updated_at);
