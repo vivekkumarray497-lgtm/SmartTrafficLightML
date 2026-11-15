@@ -55,6 +55,30 @@ jobs:
               "X-Control-Token": app.CONTROL_API_TOKEN,
           }
 
+          # PIN verification must reject an incorrect value and accept the real server token.
+          verify_without_csrf = client.post(
+              "/api/control/verify",
+              headers={"X-Control-Token": app.CONTROL_API_TOKEN},
+              json={},
+          )
+          assert verify_without_csrf.status_code == 403, verify_without_csrf.data.decode()
+
+          invalid_pin = client.post(
+              "/api/control/verify",
+              headers={**csrf_headers, "X-Control-Token": "definitely-wrong"},
+              json={},
+          )
+          assert invalid_pin.status_code == 401, invalid_pin.data.decode()
+          assert invalid_pin.get_json()["valid"] is False
+
+          valid_pin = client.post(
+              "/api/control/verify",
+              headers=control_headers,
+              json={},
+          )
+          assert valid_pin.status_code == 200, valid_pin.data.decode()
+          assert valid_pin.get_json()["valid"] is True
+
           # State-changing API requests must reject missing CSRF and control tokens.
           csrf_rejected = client.post("/api/camera/reset")
           assert csrf_rejected.status_code == 403, csrf_rejected.data.decode()
