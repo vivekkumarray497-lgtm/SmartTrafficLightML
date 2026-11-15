@@ -50,6 +50,8 @@ jobs:
           page_html = page.data.decode()
           assert 'id="liveFramesProcessed"' in page_html
           assert 'id="liveVehiclesDetected"' in page_html
+          assert 'width: {ideal: 1280}' in page_html
+          assert 'canvas.width = Math.min(1280, sourceWidth)' in page_html
           assert 'human-verified accuracy samples' in page_html
           with client.session_transaction() as session:
               csrf_token = session["csrf_token"]
@@ -157,6 +159,9 @@ jobs:
               return {
                   "cars": 1, "bikes": 0, "buses": 0, "trucks": 0,
                   "total_vehicles": 1,
+                  "input_frame_width": int(frame.shape[1]),
+                  "input_frame_height": int(frame.shape[0]),
+                  "processing_ms": 1.0,
                   "directions": {"North": 1, "South": 0, "East": 0, "West": 0},
                   "pedestrians": 0, "avg_speed": 20.0, "density": "LOW",
                   "queue_length": 1, "avg_waiting_time": 14.0,
@@ -175,6 +180,9 @@ jobs:
           assert frame.status_code == 200, frame.data.decode()
           frame_state = frame.get_json()
           assert frame_state["traffic"] == 1
+          assert frame_state["input_frame_width"] == 320, frame_state
+          assert frame_state["input_frame_height"] == 180, frame_state
+          assert frame_state["processing_ms"] == 1.0, frame_state
           assert frame_state["frame_id"], frame_state
           assert frame_state["frames_processed"] >= 1, frame_state
           assert frame_state["operational_evaluation"]["total_samples"] == 0, frame_state
