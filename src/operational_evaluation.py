@@ -344,6 +344,7 @@ class OperationalEvaluator:
             f"Validation submissions are separated by at least {self.minimum_sample_interval_seconds:g} seconds.",
             f"Component indicators require at least {self.minimum_component_samples} complete labelled frames.",
             f"Overall exact-match accuracy requires at least {self.minimum_samples} complete labelled frames.",
+            "The 50-frame threshold is a project-level screening gate, not a universal statistical sample-size standard.",
             "The 95% Wilson interval communicates sampling uncertainty; it does not remove dataset bias.",
             "Unique frame IDs and time spacing do not guarantee independent or diverse scenes.",
             "Emergency macro recall is withheld until No emergency, Ambulance and Fire truck each have enough actual examples.",
