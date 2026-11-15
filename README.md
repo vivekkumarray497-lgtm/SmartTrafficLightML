@@ -14,7 +14,7 @@ A Flask-based smart traffic management application that combines computer vision
 - Consistent traffic-density classification including zero-traffic state and adaptive green-time selection
 - Vehicle tracking and approximate speed estimation
 - Queue and waiting indicators
-- Random Forest prediction using the included 14-feature model
+- A legacy 14-feature Red/Yellow/Green signal-state classifier plus a separate traffic-priority ML model
 - Modern dark, responsive dashboard with live vehicle statistics and density
 - Four-direction signal status, adaptive green duration, and countdown-to-re-evaluation
 - Auto/Manual demonstration mode with manual direction selection
@@ -122,7 +122,7 @@ Run the model comparison from the repository root after installing requirements:
 python src/train_model.py
 ```
 
-The script compares Extra Trees, Random Forest, Gradient Boosting, and HistGradientBoosting using stratified 5-fold cross-validation on the training split. It evaluates the selected candidate on the fixed 20% holdout and replaces `model/random_forest_model.pkl` only if that candidate beats the current model on that holdout. The detailed comparison, class report, and confusion matrix are written to `reports/model_evaluation.json`.
+The script compares Extra Trees, Random Forest, Gradient Boosting, and HistGradientBoosting using expanding-window time-series cross-validation on the first 80% of timestamp-sorted records. It evaluates the selected candidate on the fixed 20% holdout and replaces `model/random_forest_model.pkl` only if that candidate beats the current model on that holdout. The detailed comparison, class report, and confusion matrix are written to `reports/model_evaluation.json`.
 
 Important: this is the separate tabular `signal_status` prediction task, not live camera accuracy. The included dataset has 2,000 rows, and the average traffic-volume, vehicle-count, and speed values are very similar across Red, Yellow, and Green labels. This suggests the current labels may not encode a strong learnable relationship with the supplied features, so a model-algorithm change alone may not deliver a meaningful accuracy increase. Do not relabel data just to inflate the score; use verified signal-state records or clearly documented ground-truth labels.
 
@@ -212,3 +212,26 @@ The PIN is a shared bearer secret, not individual user accounts, roles, audit id
 ## Model training workflow
 
 The GitHub Actions **Train and evaluate traffic models** workflow is manual-only. Run it from the repository Actions tab when you intentionally want to retrain the tabular models. It uploads the evaluation reports, trained `.pkl` files and generated policy-training CSV as an artifact; it does not commit model binaries back to `main`. The YOLO vehicle/emergency training scripts remain Colab/GPU workflows and require a private Roboflow API key.
+
+
+## Model metric distinction
+
+Run the legacy signal-state model comparison from the repository root after installing requirements:
+
+```bash
+python src/train_model.py
+```
+
+This task predicts the dataset's Red/Yellow/Green `signal_status` column. It compares Extra Trees, Random Forest, Gradient Boosting, and HistGradientBoosting using expanding-window time-series cross-validation on the first 80% of timestamp-sorted records, then reports the final 20% as a chronological holdout. It writes the model comparison, class report, and confusion matrix to `reports/model_evaluation.json`. The saved artifact is named `model/random_forest_model.pkl` for backwards compatibility; the selected estimator may be a different classifier.
+
+The current 2,000-row dataset has almost identical average traffic features across Red, Yellow, and Green labels. For example, the correlation between the encoded signal label and traffic volume, average speed, car count, truck count, and bike count is close to zero. This explains why the signal-state classifier performs near the three-class chance baseline. Changing hyperparameters cannot reliably fix labels that do not carry a learnable signal. The legacy signal-state accuracy must not be represented as live camera accuracy.
+
+The project also contains a separate traffic-priority model. Train it with:
+
+```bash
+python src/train_policy_model.py
+```
+
+That script generates LOW/MEDIUM/HIGH labels using the documented traffic-pressure formula, trains candidate classifiers, and evaluates them on a later chronological holdout. The current checked-in evaluation reports 95.5% held-out **policy agreement** on 400 records. This means the model reproduces the generated formula labels; it is not independently observed road accuracy, live vehicle-detection accuracy, or signal-state accuracy. The dashboard now presents this metric separately from the legacy signal-state score so that the two tasks are not confused.
+
+For a genuine increase in Red/Yellow/Green signal-state accuracy, collect timestamped camera observations and independently verify the actual signal phase and corresponding traffic conditions. Keep these records separate until reviewed; never copy model predictions into ground-truth labels.
