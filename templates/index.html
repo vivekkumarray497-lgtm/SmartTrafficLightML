@@ -168,8 +168,8 @@ function renderOperationalEvaluation(evaluation) {
     note.textContent = evaluation.accuracy === null
       ? 'Collect ' + Number(evaluation.remaining_samples || 0) +
         ' more complete, human-reviewed frames. Overall exact match stays locked until ' +
-        minimum + ' frames; component indicators become available after ' +
-        componentMinimum + '. This is not AI confidence.'
+        minimum + ' frames. Density, direction and signal indicators start after ' +
+        componentMinimum + '; emergency macro recall has a separate per-class requirement. This is not AI confidence.'
       : 'Strict exact match: ' + Number(evaluation.correct_samples || 0) +
         ' of ' + total + ' scenes had all four outputs correct. The 95% Wilson interval is shown to communicate sampling uncertainty.';
   }
@@ -186,7 +186,7 @@ function renderOperationalEvaluation(evaluation) {
   const componentNote = document.getElementById('componentValidationNote');
   if (componentNote) {
     componentNote.textContent = total < componentMinimum
-      ? 'Component scores unlock after ' + componentMinimum + ' complete labelled frames. Current progress: ' + total + '/' + componentMinimum + '.'
+      ? 'Density, direction and signal scores unlock after ' + componentMinimum + ' complete labelled frames. Emergency macro recall has a separate class-balance requirement. Current component progress: ' + total + '/' + componentMinimum + '.'
       : 'Preliminary component match rates are based on ' + total +
         ' human-reviewed frames. Density, direction and signal scores are calculated separately; they are not the overall exact-match score.';
   }
