@@ -171,7 +171,9 @@ traffic_data = {
     "mode": "Auto", "countdown": ALL_RED_DURATION, "frame_id": "",
     "live_confidence": None, "live_confidence_samples": 0,
     "vehicle_confidence": None, "vehicle_confidence_samples": 0,
-    "vehicle_class_confidence": {}, "pedestrian_confidence": None
+    "vehicle_class_confidence": {}, "pedestrian_confidence": None,
+    "primary_vehicle_detections": 0, "tiled_inference_used": False,
+    "tiled_detections_added": 0, "tiled_inference_error": ""
 }
 
 def evaluate_model_accuracy():
@@ -475,6 +477,10 @@ def update_state(metrics):
             "vehicle_confidence_samples": metrics.get("vehicle_confidence_samples", 0),
             "vehicle_class_confidence": dict(metrics.get("vehicle_class_confidence", {})),
             "pedestrian_confidence": metrics.get("pedestrian_confidence"),
+            "primary_vehicle_detections": metrics.get("primary_vehicle_detections", metrics["total_vehicles"]),
+            "tiled_inference_used": bool(metrics.get("tiled_inference_used", False)),
+            "tiled_detections_added": int(metrics.get("tiled_detections_added", 0)),
+            "tiled_inference_error": str(metrics.get("tiled_inference_error", "")),
             "directions": dict(metrics["directions"]),
             "pedestrian_directions": dict(metrics.get(
                 "pedestrian_directions",
@@ -577,6 +583,10 @@ def reset_state():
             "vehicle_confidence_samples": 0,
             "vehicle_class_confidence": {},
             "pedestrian_confidence": None,
+            "primary_vehicle_detections": 0,
+            "tiled_inference_used": False,
+            "tiled_detections_added": 0,
+            "tiled_inference_error": "",
             "mode": control_mode,
             "countdown": ALL_RED_DURATION,
             "updated_at": "Camera stopped",
