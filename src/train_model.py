@@ -17,9 +17,19 @@ from datetime import datetime
 import joblib
 import pandas as pd
 from sklearn.dummy import DummyClassifier
-from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier, HistGradientBoostingClassifier, GradientBoostingClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    RandomForestClassifier,
+    HistGradientBoostingClassifier,
+    GradientBoostingClassifier,
+)
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASET_PATH = os.path.join(BASE_DIR, "dataset", "cleaned_traffic_data.csv")
@@ -143,6 +153,18 @@ def main():
             max_iter=250, learning_rate=0.06, l2_regularization=1.0,
             random_state=42
         ),
+        "SVM_RBF": make_pipeline(
+            StandardScaler(),
+            SVC(C=1.0, kernel="rbf", class_weight="balanced")
+        ),
+        "KNN_11": make_pipeline(
+            StandardScaler(),
+            KNeighborsClassifier(n_neighbors=11, weights="distance")
+        ),
+        "LogisticRegression": make_pipeline(
+            StandardScaler(),
+            LogisticRegression(C=0.5, max_iter=2000, class_weight="balanced")
+        ),
     }
 
     print(f"Valid rows: {len(X)} | train: {len(X_train)} | holdout: {len(X_test)}")
@@ -157,14 +179,16 @@ def main():
     cv_results = {}
     fitted_candidates = {}
     for name, candidate in candidates.items():
-        scores = cross_val_score(candidate, X_train, y_train, cv=cv, scoring="accuracy", n_jobs=None)
+        scores = cross_val_score(
+            candidate, X_train, y_train, cv=cv, scoring="accuracy", n_jobs=None
+        )
         candidate.fit(X_train, y_train)
         cv_results[name] = {
             "cv_mean_accuracy": round(float(scores.mean()), 4),
             "cv_std": round(float(scores.std()), 4),
         }
         fitted_candidates[name] = candidate
-        print(f"{name}: CV {scores.mean() * 100:.2f}% (+/- {scores.std() * 100:.2f}%)")
+        print(f"{name}: CV accuracy {scores.mean() * 100:.2f}% (+/- {scores.std() * 100:.2f}%)")
 
     best_name = max(cv_results, key=lambda name: cv_results[name]["cv_mean_accuracy"])
     best_model = fitted_candidates[best_name]
@@ -278,7 +302,15 @@ def main():
     with open(REPORT_PATH, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
 
+    active_macro_f1 = f1_score(
+        y_test, y_pred, labels=[0, 1, 2], average="macro", zero_division=0
+    )
+    report["active_model_holdout_macro_f1"] = round(float(active_macro_f1), 4)
+    with open(REPORT_PATH, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+
     print(f"Active model holdout accuracy: {active_accuracy * 100:.2f}%")
+    print(f"Active model holdout macro-F1: {active_macro_f1:.4f}")
     print(classification_report(y_test, y_pred, labels=[0, 1, 2], target_names=SIGNAL_NAMES, zero_division=0))
     print(f"Detailed report: {REPORT_PATH}")
     if active_accuracy <= majority_accuracy + 0.05:
