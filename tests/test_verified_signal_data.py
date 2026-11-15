@@ -67,9 +67,11 @@ class VerifiedSignalDataStoreTests(unittest.TestCase):
         for session_index in range(8):
             for label in LABELS:
                 rows.append((session_index, label))
-        y = __import__("pandas").Series([label for _, label in rows])
-        groups = __import__("pandas").Series([f"session-{index}" for index, _ in rows])
-        train_indices, test_indices = grouped_holdout(None, y, groups)
+        pandas = __import__("pandas")
+        y = pandas.Series([label for _, label in rows])
+        groups = pandas.Series([f"session-{index}" for index, _ in rows])
+        X = pandas.DataFrame({"sample": range(len(rows))})
+        train_indices, test_indices = grouped_holdout(X, y, groups)
         train_sessions = set(groups.iloc[train_indices])
         test_sessions = set(groups.iloc[test_indices])
         self.assertFalse(train_sessions.intersection(test_sessions))
