@@ -37,6 +37,56 @@ SIGNAL_MAP = {"Red": 0, "Yellow": 1, "Green": 2}
 SIGNAL_NAMES = ["Red", "Yellow", "Green"]
 
 
+def target_diagnostics(X, y):
+    encoded_target = y.astype(float)
+    correlations = {}
+    for feature in FEATURES:
+        values = X[feature].astype(float)
+        if values.nunique() < 2 or encoded_target.nunique() < 2:
+            correlations[feature] = None
+            continue
+        correlation = values.corr(encoded_target)
+        correlations[feature] = (
+            round(float(correlation), 4) if pd.notna(correlation) else None
+        )
+
+    class_means = {}
+    for label, name in enumerate(SIGNAL_NAMES):
+        subset = X.loc[y == label]
+        class_means[name] = {
+            feature: round(float(subset[feature].mean()), 3)
+            for feature in (
+                "traffic_volume",
+                "avg_vehicle_speed",
+                "vehicle_count_cars",
+                "vehicle_count_trucks",
+                "vehicle_count_bikes",
+            )
+        }
+
+    valid_correlations = [
+        abs(value) for value in correlations.values() if value is not None
+    ]
+    maximum_absolute_correlation = (
+        round(max(valid_correlations), 4) if valid_correlations else None
+    )
+    warning = None
+    if maximum_absolute_correlation is not None and maximum_absolute_correlation < 0.10:
+        warning = (
+            "The supplied numeric features have very weak individual linear "
+            "association with the encoded signal labels. A model score near the "
+            "majority baseline is expected until independently verified signal "
+            "phase and traffic observations are collected."
+        )
+
+    return {
+        "pearson_correlation_with_encoded_signal_label": correlations,
+        "class_feature_means": class_means,
+        "maximum_absolute_feature_correlation": maximum_absolute_correlation,
+        "warning": warning,
+    }
+
+
 def load_data():
     df = pd.read_csv(DATASET_PATH)
     raw_required = [
@@ -145,13 +195,47 @@ def main():
             "retraining on chronological training data"
         )
 
-    promoted = previous_accuracy is None or candidate_accuracy > previous_accuracy
+    baseline_margin = candidate_accuracy - majority_accuracy
+    minimum_baseline_margin = 0.01
+    promotion_decision = ""
+
+    if baseline_margin < minimum_baseline_margin:
+        promoted = False
+        promotion_decision = (
+            "Candidate was not promoted because it did not beat the majority "
+            "baseline by at least 1 percentage point."
+        )
+    elif os.path.exists(MODEL_PATH) and previous_accuracy is None:
+        promoted = False
+        promotion_decision = (
+            "Candidate was not promoted because the existing model could not "
+            "be compared under the same evaluation protocol. The existing "
+            "model was preserved."
+        )
+    elif previous_accuracy is not None and candidate_accuracy <= previous_accuracy + 0.005:
+        promoted = False
+        promotion_decision = (
+            "Candidate was not promoted because it did not beat the comparable "
+            "existing model by at least 0.5 percentage points."
+        )
+    else:
+        promoted = True
+        promotion_decision = (
+            "Candidate cleared the majority-baseline and model-comparison gates."
+        )
+
     if promoted:
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         joblib.dump(best_model, MODEL_PATH)
         print(f"Saved {best_name} as the active model.")
     else:
-        print(f"Kept existing model ({previous_accuracy * 100:.2f}% holdout); candidate did not improve it.")
+        if os.path.exists(MODEL_PATH):
+            print("Kept the existing model. " + promotion_decision)
+        else:
+            raise RuntimeError(
+                "No existing model is available and the candidate failed the "
+                "majority-baseline promotion gate. No model was saved."
+            )
 
     active_model = best_model if promoted else joblib.load(MODEL_PATH)
     y_pred = active_model.predict(X_test[FEATURES])
@@ -165,6 +249,10 @@ def main():
         "split": "chronological first 80% for training, final 20% for held-out testing",
         "cross_validation_method": "training-only expanding-window TimeSeriesSplit (5 folds)",
         "majority_baseline_accuracy": round(float(majority_accuracy), 4),
+        "candidate_minus_majority_baseline": round(float(baseline_margin), 4),
+        "minimum_baseline_margin_for_promotion": minimum_baseline_margin,
+        "promotion_decision": promotion_decision,
+        "target_diagnostics": target_diagnostics(X, y),
         "previous_model_holdout_accuracy": None if previous_accuracy is None else round(float(previous_accuracy), 4),
         "previous_model_comparison_status": previous_comparison_status,
         "best_candidate_by_training_cv": best_name,
@@ -184,7 +272,7 @@ def main():
             output_dict=True, zero_division=0
         ),
         "confusion_matrix": confusion_matrix(y_test, y_pred, labels=[0, 1, 2]).tolist(),
-        "note": "This evaluates the tabular signal_status labels only. It is not live-camera or emergency-detection accuracy."
+        "note": "This evaluates the tabular signal_status labels only. It is not live-camera or emergency-detection accuracy. A candidate is not promoted unless it beats the majority baseline by at least 1 percentage point and passes the comparable-model gate."
     }
     os.makedirs(os.path.dirname(REPORT_PATH), exist_ok=True)
     with open(REPORT_PATH, "w", encoding="utf-8") as handle:
