@@ -2,6 +2,14 @@ name: Train and evaluate traffic models
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "dataset/cleaned_traffic_data.csv"
+      - "src/train_model.py"
+      - "src/train_policy_model.py"
+      - ".github/workflows/train-model.yml"
 
 concurrency:
   group: traffic-model-training
@@ -28,7 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pandas numpy scikit-learn==1.8.0 joblib
 
-      - name: Evaluate legacy signal-label model
+      - name: Evaluate legacy signal-state model
         run: python src/train_model.py
 
       - name: Train traffic-priority policy model
