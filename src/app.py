@@ -109,7 +109,12 @@ person_model = (
     if YOLO_MODEL_PATH == CUSTOM_VEHICLE_MODEL_PATH else None
 )
 emergency_detector = EmergencyDetector()
-vision = VisionEngine(yolo_model, emergency_detector, person_model=person_model)
+vision = VisionEngine(
+    yolo_model,
+    emergency_detector,
+    person_model=person_model,
+    tile_model_factory=lambda: YOLO(YOLO_MODEL_PATH),
+)
 controller = AdaptiveController()
 analytics = AnalyticsStore(HISTORY_PATH)
 operational_evaluator = OperationalEvaluator(
