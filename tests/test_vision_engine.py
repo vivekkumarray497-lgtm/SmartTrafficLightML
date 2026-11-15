@@ -227,12 +227,17 @@ class VisionEngineTests(unittest.TestCase):
             FakeBox(2, 0.90, [100, 100, 220, 220]),
             FakeBox(3, 0.88, [250, 100, 350, 220]),
         ])
-        engine = VisionEngine(model)
+        factory_calls = []
+        engine = VisionEngine(
+            model,
+            tile_model_factory=lambda: factory_calls.append(True),
+        )
         metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
 
         self.assertFalse(metrics["tiled_inference_used"])
         self.assertEqual(metrics["tiled_detections_added"], 0)
         self.assertEqual(metrics["total_vehicles"], 2)
+        self.assertEqual(factory_calls, [])
         self.assertFalse(hasattr(model, "predict_kwargs"))
 
     def test_dense_tile_inference_can_be_disabled(self):
