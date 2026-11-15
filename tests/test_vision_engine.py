@@ -269,6 +269,14 @@ class VisionEngineTests(unittest.TestCase):
         self.assertFalse(metrics["tiled_inference_used"])
         self.assertEqual(metrics["total_vehicles"], 3)
 
+    def test_process_reports_input_frame_size_and_processing_time(self):
+        engine = VisionEngine(FakeModel([]))
+        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertEqual(metrics["input_frame_width"], 640)
+        self.assertEqual(metrics["input_frame_height"], 360)
+        self.assertGreaterEqual(metrics["processing_ms"], 0.0)
+
     def test_invalid_environment_settings_fall_back_safely(self):
         with patch.dict("os.environ", {
             "TRAFFIC_DETECTION_CONF": "bad",
