@@ -244,6 +244,9 @@ function renderLiveCameraActivity(state) {
   const vehicles = document.getElementById('liveVehiclesDetected');
   const tiled = document.getElementById('tiledDetectedCount');
   const note = document.getElementById('liveAccuracyActivityNote');
+  const frameDetails = Number(state.input_frame_width || 0) > 0
+    ? 'Input ' + Number(state.input_frame_width) + '×' + Number(state.input_frame_height) + ' px · processing ' + Number(state.processing_ms || 0).toFixed(1) + ' ms. '
+    : '';
   if (frames) frames.textContent = Number(state.frames_processed || 0).toLocaleString();
   if (vehicles) vehicles.textContent = Number(state.traffic || 0).toLocaleString();
   if (tiled) tiled.textContent = Number(state.tiled_detections_added || 0).toLocaleString();
@@ -254,14 +257,14 @@ function renderLiveCameraActivity(state) {
     if (!hasFrame) {
       note.textContent = 'Waiting for a processed camera frame. Standard single-pass YOLO detection is active. Live detections are not verified accuracy samples.';
     } else if (state.tiled_inference_error) {
-      note.textContent = 'Dense-scene crop scan error: ' + state.tiled_inference_error +
+      note.textContent = frameDetails + 'Dense-scene crop scan error: ' + state.tiled_inference_error +
         '. Full-frame YOLO detections are still being used.';
     } else if (state.tiled_inference_used) {
-      note.textContent = 'Dense-scene crop scan ran on this frame and added ' +
+      note.textContent = frameDetails + 'Dense-scene crop scan ran on this frame and added ' +
         Number(state.tiled_detections_added || 0) +
         ' additional vehicle(s) after duplicate removal. This scan can improve recall, but fully hidden vehicles can still be missed.';
     } else {
-      note.textContent = 'Live camera is processing frames. ' + Number(state.traffic || 0) +
+      note.textContent = frameDetails + 'Live camera is processing frames. ' + Number(state.traffic || 0) +
         ' vehicle(s) in the latest frame. Optional four-crop scanning is disabled in the stable default profile. Live detections do not count as human-verified accuracy samples.';
     }
   }
@@ -471,7 +474,7 @@ async function startCamera() {
     }
 
     cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: {facingMode: 'environment', width: {ideal: 960}, height: {ideal: 540}},
+      video: {facingMode: 'environment', width: {ideal: 1280}, height: {ideal: 720}},
       audio: false
     });
 
@@ -523,11 +526,12 @@ async function sendFrame() {
 
   if (video.readyState < 2 || !video.videoWidth) return;
 
-  // Preserve more detail for distant emergency vehicles while keeping
-  // the original camera aspect ratio.
-  canvas.width = 800;
-  canvas.height = Math.max(450, Math.round(800 * video.videoHeight / video.videoWidth));
-  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  // Keep the camera's native detail, capped to a practical 1280-pixel width.
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  canvas.width = Math.min(1280, sourceWidth);
+  canvas.height = Math.max(1, Math.round(canvas.width * sourceHeight / sourceWidth));
+  canvas.getContext('2d', {alpha: false}).drawImage(video, 0, 0, canvas.width, canvas.height);
 
   processing = true;
 
@@ -535,7 +539,7 @@ async function sendFrame() {
     const r = await fetch('/api/frame', {
       method: 'POST',
       headers: controlHeaders({'Content-Type': 'application/json'}),
-      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.72), direction: document.getElementById('browserCameraDirection').value})
+      body: JSON.stringify({image: canvas.toDataURL('image/jpeg', 0.82), direction: document.getElementById('browserCameraDirection').value})
     });
 
     const data = await r.json();
