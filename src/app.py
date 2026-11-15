@@ -115,6 +115,16 @@ vision = VisionEngine(
     person_model=person_model,
     tile_model_factory=lambda: YOLO(YOLO_MODEL_PATH),
 )
+print(
+    "[vision] Detector profile: "
+    f"model={os.path.basename(YOLO_MODEL_PATH)}, "
+    f"confidence={vision.confidence_threshold:.2f}, "
+    f"imgsz={vision.image_size}, "
+    f"iou={vision.nms_iou_threshold:.2f}, "
+    f"max_det={vision.max_detections}, "
+    f"dense_tiles={'on' if vision.tiled_inference_enabled else 'off'}",
+    flush=True,
+)
 controller = AdaptiveController()
 analytics = AnalyticsStore(HISTORY_PATH)
 operational_evaluator = OperationalEvaluator(
@@ -797,6 +807,7 @@ def api_health():
         "vehicle_detection_iou_threshold": vision.nms_iou_threshold,
         "vehicle_detection_max_detections": vision.max_detections,
         "dense_tile_inference_enabled": vision.tiled_inference_enabled,
+        "dense_tile_model_loaded": vision.tile_model is not None,
         "dense_tile_detection_trigger": vision.tiled_detection_trigger,
         "dense_tile_confidence_threshold": vision.tile_confidence_threshold,
         "dense_tile_image_size": vision.tile_image_size,
