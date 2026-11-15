@@ -571,8 +571,10 @@ def reset_state():
     global signal_started_at, signal_duration, last_signal_key
     global current_direction, signal_phase, pending_direction, phase_started_at
     global pending_is_emergency, current_green_is_emergency
-    global browser_camera_active
+    global browser_camera_active, frame_session_id, frame_sequence
 
+    frame_session_id = uuid.uuid4().hex
+    frame_sequence = 0
     now = time.time()
     browser_camera_active = False
     vision.reset_tracking()
