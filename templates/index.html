@@ -57,6 +57,7 @@
 <div class="stats">
 <div class="stat">AI Frames Processed<strong id="liveFramesProcessed">{{state.frames_processed}}</strong></div>
 <div class="stat">Vehicles in Latest Frame<strong id="liveVehiclesDetected">{{state.traffic}}</strong></div>
+<div class="stat">Extra Vehicles from Dense Scan<strong id="tiledDetectedCount">{{state.tiled_detections_added}}</strong></div>
 </div>
 <p class="muted" id="liveAccuracyActivityNote">These live counters update automatically as the camera is processed. They are detection activity, not verified accuracy.</p>
 <h3>Component-wise results</h3>
@@ -241,17 +242,28 @@ function renderOperationalEvaluation(evaluation) {
 function renderLiveCameraActivity(state) {
   const frames = document.getElementById('liveFramesProcessed');
   const vehicles = document.getElementById('liveVehiclesDetected');
+  const tiled = document.getElementById('tiledDetectedCount');
   const note = document.getElementById('liveAccuracyActivityNote');
   if (frames) frames.textContent = Number(state.frames_processed || 0).toLocaleString();
   if (vehicles) vehicles.textContent = Number(state.traffic || 0).toLocaleString();
+  if (tiled) tiled.textContent = Number(state.tiled_detections_added || 0).toLocaleString();
 
   if (note) {
     const hasFrame = Boolean(state.frame_id) &&
       !['Not started', 'Camera stopped'].includes(state.updated_at);
-    note.textContent = hasFrame
-      ? 'Live camera is processing frames. ' + Number(state.traffic || 0) +
-        ' vehicle(s) in the latest processed frame. These detections do not count as human-verified accuracy samples.'
-      : 'Waiting for a processed camera frame. When a vehicle is detected, the live counters update automatically; accuracy requires independent human verification.';
+    if (!hasFrame) {
+      note.textContent = 'Waiting for a processed camera frame. Crowded-scene crop detection starts when at least three full-frame vehicles are found. Live detections are not verified accuracy samples.';
+    } else if (state.tiled_inference_error) {
+      note.textContent = 'Dense-scene crop scan error: ' + state.tiled_inference_error +
+        '. Full-frame YOLO detections are still being used.';
+    } else if (state.tiled_inference_used) {
+      note.textContent = 'Dense-scene crop scan ran on this frame and added ' +
+        Number(state.tiled_detections_added || 0) +
+        ' additional vehicle(s) after duplicate removal. This scan can improve recall, but fully hidden vehicles can still be missed.';
+    } else {
+      note.textContent = 'Live camera is processing frames. ' + Number(state.traffic || 0) +
+        ' vehicle(s) in the latest frame. The four-crop scan starts when at least three vehicles are detected. Live detections do not count as human-verified accuracy samples.';
+    }
   }
 }
 
