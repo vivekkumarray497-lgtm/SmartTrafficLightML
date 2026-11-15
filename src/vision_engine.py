@@ -8,6 +8,7 @@ try:
 except ImportError:
     from traffic_density import calculate_traffic_density
 from collections import defaultdict, deque
+from types import SimpleNamespace
 
 class VisionEngine:
     VEHICLES = {1: "bikes", 2: "cars", 3: "bikes", 5: "buses", 7: "trucks"}
@@ -18,15 +19,60 @@ class VisionEngine:
         self.person_model = person_model
         self.vehicle_classes, self.person_classes = self._resolve_model_classes(model)
         try:
-            self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.22"))
+            self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.18"))
         except ValueError:
-            self.confidence_threshold = 0.22
+            self.confidence_threshold = 0.18
         self.confidence_threshold = min(0.95, max(0.05, self.confidence_threshold))
         try:
-            self.image_size = int(os.environ.get("TRAFFIC_IMAGE_SIZE", "960"))
+            self.image_size = int(os.environ.get("TRAFFIC_IMAGE_SIZE", "1280"))
         except ValueError:
-            self.image_size = 960
+            self.image_size = 1280
         self.image_size = min(1280, max(640, self.image_size))
+        try:
+            self.nms_iou_threshold = float(os.environ.get("TRAFFIC_DETECTION_IOU", "0.65"))
+        except ValueError:
+            self.nms_iou_threshold = 0.65
+        self.nms_iou_threshold = min(0.90, max(0.30, self.nms_iou_threshold))
+        try:
+            self.max_detections = int(os.environ.get("TRAFFIC_MAX_DETECTIONS", "1000"))
+        except ValueError:
+            self.max_detections = 1000
+        self.max_detections = min(2000, max(100, self.max_detections))
+
+        self.tiled_inference_enabled = os.environ.get(
+            "TRAFFIC_TILED_INFERENCE", "1"
+        ).strip().lower() not in {"0", "false", "no", "off"}
+        try:
+            self.tiled_detection_trigger = int(
+                os.environ.get("TRAFFIC_TILED_TRIGGER", "4")
+            )
+        except ValueError:
+            self.tiled_detection_trigger = 4
+        self.tiled_detection_trigger = min(100, max(2, self.tiled_detection_trigger))
+        try:
+            self.tile_confidence_threshold = float(
+                os.environ.get("TRAFFIC_TILE_CONF", "0.12")
+            )
+        except ValueError:
+            self.tile_confidence_threshold = 0.12
+        self.tile_confidence_threshold = min(
+            0.90, max(0.05, self.tile_confidence_threshold)
+        )
+        try:
+            self.tile_image_size = int(
+                os.environ.get("TRAFFIC_TILE_IMAGE_SIZE", "960")
+            )
+        except ValueError:
+            self.tile_image_size = 960
+        self.tile_image_size = min(1280, max(640, self.tile_image_size))
+        try:
+            self.tile_max_detections = int(
+                os.environ.get("TRAFFIC_TILE_MAX_DETECTIONS", "300")
+            )
+        except ValueError:
+            self.tile_max_detections = 300
+        self.tile_max_detections = min(1000, max(50, self.tile_max_detections))
+        self.last_tiled_inference_error = ""
         self.queue_roi = self._read_queue_roi()
         try:
             self.stopped_speed_threshold = float(
@@ -141,6 +187,124 @@ class VisionEngine:
             return "East" if dx > 0 else "West"
         return "South" if dy > 0 else "North"
 
+    @staticmethod
+    def _box_overlap(existing_box, candidate_box):
+        ex1, ey1, ex2, ey2 = existing_box
+        cx1, cy1, cx2, cy2 = candidate_box
+        intersection_w = max(0, min(ex2, cx2) - max(ex1, cx1))
+        intersection_h = max(0, min(ey2, cy2) - max(ey1, cy1))
+        intersection = intersection_w * intersection_h
+        if intersection <= 0:
+            return False
+
+        existing_area = max(1, (ex2 - ex1) * (ey2 - ey1))
+        candidate_area = max(1, (cx2 - cx1) * (cy2 - cy1))
+        union = existing_area + candidate_area - intersection
+        iou = intersection / max(1, union)
+        containment = intersection / min(existing_area, candidate_area)
+        return iou >= 0.45 or containment >= 0.75
+
+    def _add_dense_tile_detections(self, frame, detections_to_process):
+        primary_vehicle_count = sum(
+            1 for _, class_id, is_person, _ in detections_to_process
+            if not is_person and class_id in self.vehicle_classes
+        )
+        self.last_tiled_inference_error = ""
+
+        if (
+            not self.tiled_inference_enabled
+            or primary_vehicle_count < self.tiled_detection_trigger
+            or not self.vehicle_classes
+        ):
+            return primary_vehicle_count, 0, False
+
+        height, width = frame.shape[:2]
+        tile_width = min(width, max(1, int(round(width * 0.59))))
+        tile_height = min(height, max(1, int(round(height * 0.59))))
+        x_starts = sorted({0, max(0, width - tile_width)})
+        y_starts = sorted({0, max(0, height - tile_height)})
+
+        tiles = []
+        for y_start in y_starts:
+            for x_start in x_starts:
+                crop = frame[
+                    y_start:y_start + tile_height,
+                    x_start:x_start + tile_width
+                ]
+                if crop.size:
+                    tiles.append((crop, x_start, y_start))
+
+        if not tiles:
+            return primary_vehicle_count, 0, False
+
+        existing_boxes = []
+        for box, class_id, is_person, _ in detections_to_process:
+            if is_person or class_id not in self.vehicle_classes:
+                continue
+            coordinates = tuple(map(int, box.xyxy[0]))
+            existing_boxes.append((class_id, coordinates))
+
+        try:
+            tile_results = self.model.predict(
+                [crop for crop, _, _ in tiles],
+                conf=self.tile_confidence_threshold,
+                iou=self.nms_iou_threshold,
+                imgsz=self.tile_image_size,
+                max_det=self.tile_max_detections,
+                verbose=False,
+                classes=sorted(self.vehicle_classes),
+                stream=False,
+            )
+        except Exception as exc:
+            self.last_tiled_inference_error = str(exc)[:180]
+            return primary_vehicle_count, 0, True
+
+        added = 0
+        for tile_result, (_, x_offset, y_offset) in zip(tile_results, tiles):
+            tile_boxes = getattr(tile_result, "boxes", None)
+            if tile_boxes is None:
+                continue
+
+            for box in tile_boxes:
+                class_id = int(box.cls[0])
+                if class_id not in self.vehicle_classes:
+                    continue
+
+                local_x1, local_y1, local_x2, local_y2 = map(
+                    float, box.xyxy[0]
+                )
+                global_box = (
+                    max(0, min(width - 1, int(round(local_x1 + x_offset)))),
+                    max(0, min(height - 1, int(round(local_y1 + y_offset)))),
+                    max(0, min(width, int(round(local_x2 + x_offset)))),
+                    max(0, min(height, int(round(local_y2 + y_offset)))),
+                )
+                x1, y1, x2, y2 = global_box
+                if x2 <= x1 or y2 <= y1:
+                    continue
+
+                duplicate = any(
+                    existing_class == class_id
+                    and self._box_overlap(existing_box, global_box)
+                    for existing_class, existing_box in existing_boxes
+                )
+                if duplicate:
+                    continue
+
+                extra_box = SimpleNamespace(
+                    cls=[class_id],
+                    conf=[float(box.conf[0])],
+                    xyxy=[np.asarray(global_box, dtype=np.float32)],
+                    id=None,
+                )
+                detections_to_process.append(
+                    (extra_box, class_id, False, len(detections_to_process))
+                )
+                existing_boxes.append((class_id, global_box))
+                added += 1
+
+        return primary_vehicle_count, added, True
+
     def process(self, frame):
         emergency_input = frame.copy()
 
@@ -161,9 +325,9 @@ class VisionEngine:
             frame,
             persist=True,
             conf=self.confidence_threshold,
-            iou=0.50,
+            iou=self.nms_iou_threshold,
             imgsz=self.image_size,
-            max_det=500,
+            max_det=self.max_detections,
             verbose=False,
             classes=sorted(set(self.vehicle_classes) | self.person_classes),
         )[0]
@@ -176,6 +340,10 @@ class VisionEngine:
                 detections_to_process.append(
                     (box, class_id, class_id in self.person_classes, index)
                 )
+
+        primary_vehicle_count, tiled_detections_added, tiled_inference_used = (
+            self._add_dense_tile_detections(frame, detections_to_process)
+        )
 
         if self.person_model is not None and not self.person_classes:
             person_result = self.person_model.predict(
@@ -385,6 +553,10 @@ class VisionEngine:
             "live_confidence": round(float(np.mean(vehicle_detection_confidences)) * 100, 1)
             if vehicle_detection_confidences else None,
             "live_confidence_samples": len(vehicle_detection_confidences),
+            "primary_vehicle_detections": primary_vehicle_count,
+            "tiled_inference_used": tiled_inference_used,
+            "tiled_detections_added": tiled_detections_added,
+            "tiled_inference_error": self.last_tiled_inference_error,
         }
         self._cleanup_stale_tracks(time.time())
         return metrics, frame
