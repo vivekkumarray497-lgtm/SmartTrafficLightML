@@ -9,14 +9,25 @@ except ImportError:
     from traffic_density import calculate_traffic_density
 from collections import defaultdict, deque
 from types import SimpleNamespace
+import threading
 
 class VisionEngine:
     VEHICLES = {1: "bikes", 2: "cars", 3: "bikes", 5: "buses", 7: "trucks"}
 
-    def __init__(self, model, emergency_detector=None, person_model=None):
+    def __init__(
+        self,
+        model,
+        emergency_detector=None,
+        person_model=None,
+        tile_model=None,
+        tile_model_factory=None,
+    ):
         self.model = model
         self.emergency_detector = emergency_detector
         self.person_model = person_model
+        self.tile_model = tile_model
+        self.tile_model_factory = tile_model_factory
+        self.tile_model_lock = threading.Lock()
         self.vehicle_classes, self.person_classes = self._resolve_model_classes(model)
         try:
             self.confidence_threshold = float(os.environ.get("TRAFFIC_DETECTION_CONF", "0.18"))
@@ -39,9 +50,12 @@ class VisionEngine:
             self.max_detections = 1000
         self.max_detections = min(2000, max(100, self.max_detections))
 
-        self.tiled_inference_enabled = os.environ.get(
+        tiled_setting_enabled = os.environ.get(
             "TRAFFIC_TILED_INFERENCE", "1"
         ).strip().lower() not in {"0", "false", "no", "off"}
+        self.tiled_inference_enabled = tiled_setting_enabled and (
+            self.tile_model is not None or callable(self.tile_model_factory)
+        )
         try:
             self.tiled_detection_trigger = int(
                 os.environ.get("TRAFFIC_TILED_TRIGGER", "4")
@@ -204,6 +218,23 @@ class VisionEngine:
         containment = intersection / min(existing_area, candidate_area)
         return iou >= 0.45 or containment >= 0.75
 
+    def _get_tile_model(self):
+        if self.tile_model is not None:
+            return self.tile_model
+        if not callable(self.tile_model_factory):
+            return None
+
+        with self.tile_model_lock:
+            if self.tile_model is None:
+                try:
+                    self.tile_model = self.tile_model_factory()
+                except Exception as exc:
+                    self.last_tiled_inference_error = (
+                        "Could not load independent tile model: " + str(exc)[:140]
+                    )
+                    return None
+        return self.tile_model
+
     def _add_dense_tile_detections(self, frame, detections_to_process):
         primary_vehicle_count = sum(
             1 for _, class_id, is_person, _ in detections_to_process
@@ -216,6 +247,10 @@ class VisionEngine:
             or primary_vehicle_count < self.tiled_detection_trigger
             or not self.vehicle_classes
         ):
+            return primary_vehicle_count, 0, False
+
+        tile_model = self._get_tile_model()
+        if tile_model is None:
             return primary_vehicle_count, 0, False
 
         height, width = frame.shape[:2]
@@ -245,7 +280,7 @@ class VisionEngine:
             existing_boxes.append((class_id, coordinates))
 
         try:
-            tile_results = self.model.predict(
+            tile_results = tile_model.predict(
                 [crop for crop, _, _ in tiles],
                 conf=self.tile_confidence_threshold,
                 iou=self.nms_iou_threshold,
