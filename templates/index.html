@@ -252,7 +252,7 @@ function renderLiveCameraActivity(state) {
     const hasFrame = Boolean(state.frame_id) &&
       !['Not started', 'Camera stopped'].includes(state.updated_at);
     if (!hasFrame) {
-      note.textContent = 'Waiting for a processed camera frame. Crowded-scene crop detection starts when at least three full-frame vehicles are found. Live detections are not verified accuracy samples.';
+      note.textContent = 'Waiting for a processed camera frame. Standard single-pass YOLO detection is active. Live detections are not verified accuracy samples.';
     } else if (state.tiled_inference_error) {
       note.textContent = 'Dense-scene crop scan error: ' + state.tiled_inference_error +
         '. Full-frame YOLO detections are still being used.';
@@ -262,7 +262,7 @@ function renderLiveCameraActivity(state) {
         ' additional vehicle(s) after duplicate removal. This scan can improve recall, but fully hidden vehicles can still be missed.';
     } else {
       note.textContent = 'Live camera is processing frames. ' + Number(state.traffic || 0) +
-        ' vehicle(s) in the latest frame. The four-crop scan starts when at least three vehicles are detected. Live detections do not count as human-verified accuracy samples.';
+        ' vehicle(s) in the latest frame. Optional four-crop scanning is disabled in the stable default profile. Live detections do not count as human-verified accuracy samples.';
     }
   }
 }
