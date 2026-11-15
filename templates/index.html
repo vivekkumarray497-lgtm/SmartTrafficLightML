@@ -93,21 +93,43 @@ function csrfHeaders(extra = {}) {
 
 let controlApiToken = '';
 
-function unlockControls() {
+async function unlockControls() {
   const input = document.getElementById('controlPin');
   const status = document.getElementById('controlPinStatus');
   const token = (input.value || '').trim();
+
+  controlApiToken = '';
   if (!token) {
-    status.textContent = 'Enter the private dashboard PIN printed in the Flask server output.';
+    status.textContent = 'PIN missing. Paste the private PIN printed in the Flask server output.';
     return;
   }
-  controlApiToken = token;
-  status.textContent = 'Control PIN accepted in this page session. Refreshing the page clears it.';
+
+  status.textContent = 'Checking PIN with the Flask server...';
+  try {
+    const response = await fetch('/api/control/verify', {
+      method: 'POST',
+      headers: csrfHeaders({
+        'Content-Type': 'application/json',
+        'X-Control-Token': token
+      }),
+      body: JSON.stringify({})
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.valid) {
+      status.textContent = data.error || 'PIN verification failed. Check the Flask server output.';
+      return;
+    }
+
+    controlApiToken = token;
+    status.textContent = data.message || 'PIN verified. Dashboard controls are unlocked for this page session.';
+  } catch (error) {
+    status.textContent = 'Could not verify PIN with the server: ' + error.message;
+  }
 }
 
 function controlHeaders(extra = {}) {
-  const token = controlApiToken || (document.getElementById('controlPin')?.value || '').trim();
-  return {...csrfHeaders(extra), 'X-Control-Token': token};
+  return {...csrfHeaders(extra), 'X-Control-Token': controlApiToken};
 }
 
 function renderOperationalEvaluation(evaluation) {
@@ -324,6 +346,11 @@ refreshServerCameras();
 async function startCamera() {
   try {
     if (cameraStream) return;
+    if (!controlApiToken) {
+      document.getElementById('controlPinStatus').textContent =
+        'Camera is locked. Enter the dashboard PIN and press Unlock Controls first.';
+      throw new Error('Verify the dashboard control PIN before starting AI camera processing.');
+    }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('Browser camera API is unavailable. Use HTTPS or localhost.');
@@ -406,6 +433,11 @@ async function sendFrame() {
     document.getElementById('annotated').src = data.image;
     render(data);
   } catch (e) {
+    if (String(e.message || '').toLowerCase().includes('pin')) {
+      controlApiToken = '';
+      document.getElementById('controlPinStatus').textContent =
+        'PIN was rejected by the server. Check the current Flask server output and verify again.';
+    }
     document.getElementById('cameraStatus').textContent = 'AI processing error: ' + e.message;
   } finally {
     processing = false;
