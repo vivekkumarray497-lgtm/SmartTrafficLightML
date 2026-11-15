@@ -44,20 +44,26 @@
 <div class="card"><h2>🚦 Current Signal</h2><div id="signal" class="signal green">🟢 {{state.signal}}</div><p id="message" style="text-align:center">{{state.signal_message}}</p><div class="signal-meta"><span>Mode: <b id="signalMode">{{state.mode}}</b></span><span>Re-evaluation: <b id="signalCountdown">{{state.countdown}}</b>s</span></div><p class="muted">Last update: <span id="updated">{{state.updated_at}}</span></p></div>
 <div class="card emergency-panel"><h2>🚨 Automatic Emergency Detection</h2><div id="emergency" class="emergency">🟢 Monitoring for Ambulance / Fire Truck</div><p><b>Detection:</b> <span id="emergencyType">None</span></p><p><b>Direction:</b> <span id="emergencyDirection">—</span> &nbsp; <b>Model Confidence:</b> <span id="emergencyConfidence">0%</span></p><p class="muted" id="emergencyStatus">No ambulance or fire-truck candidate in the current frame.</p><p class="muted">Candidate confidence is the AI model score, not verified accuracy. GREEN priority activates only after repeated-frame confirmation. Police, buses and ordinary trucks do not trigger emergency priority.</p><button class="secondary" onclick="clearEmergency()">Clear / Test Reset</button></div>
 <div class="card"><h2>🤖 Legacy Signal-Label Prediction</h2><p><b>Random Forest:</b> <span id="ml">{{state.ml_prediction}}</span></p><p class="muted">Retained for comparison with the original dataset labels. The live controller uses YOLO vehicle counts and the adaptive traffic controller.</p></div>
-<div class="card"><h2>📈 Overall Traffic System Accuracy</h2>
+<div class="card"><h2>📈 Overall Traffic System Validation</h2>
 <div class="stats">
-<div class="stat">End-to-End Accuracy<strong id="operationalAccuracy">{% if state.operational_evaluation.accuracy is not none %}{{state.operational_evaluation.accuracy}}%{% else %}Not yet tested{% endif %}</strong></div>
-<div class="stat">Verified Samples<strong id="operationalSamples">{{state.operational_evaluation.total_samples}} / {{state.operational_evaluation.minimum_samples}}</strong></div>
-<div class="stat">Correct Samples<strong id="operationalCorrect">{{state.operational_evaluation.correct_samples}}</strong></div>
+<div class="stat">End-to-End Exact Match<strong id="operationalAccuracy">{% if state.operational_evaluation.accuracy is not none %}{{state.operational_evaluation.accuracy}}%{% else %}Not yet tested{% endif %}</strong></div>
+<div class="stat">Human-Verified Frames<strong id="operationalSamples">{{state.operational_evaluation.total_samples}} / {{state.operational_evaluation.minimum_samples}}</strong></div>
+<div class="stat">Fully Correct Scenes<strong id="operationalCorrect">{{state.operational_evaluation.correct_samples}}</strong></div>
+<div class="stat">95% Confidence Interval<strong id="operationalAccuracyCI">{% if state.operational_evaluation.accuracy_ci_95 %}{{state.operational_evaluation.accuracy_ci_95.lower}}–{{state.operational_evaluation.accuracy_ci_95.upper}}%{% else %}Not available{% endif %}</strong></div>
 </div>
-<p class="muted" id="operationalAccuracyNote">This is strict end-to-end exact-match accuracy against human-verified scene labels. It becomes available after at least {{state.operational_evaluation.minimum_samples}} independent samples. It is not inferred from AI confidence or policy-generated labels.</p>
+<div class="bar" aria-label="Overall validation sample progress"><span id="operationalProgress" style="width:{{ [100 * state.operational_evaluation.total_samples / state.operational_evaluation.minimum_samples, 100]|min }}%"></span></div>
+<p class="muted" id="operationalAccuracyNote">Overall exact match checks whether density, priority direction, emergency class and signal phase are all correct for the same camera frame. The score unlocks after {{state.operational_evaluation.minimum_samples}} complete human-reviewed frames.</p>
+<h3>Component-wise results</h3>
 <div class="stats">
-<div class="stat">Density<strong id="validationDensityAccuracy">{% if state.operational_evaluation.component_accuracy.density is not none %}{{state.operational_evaluation.component_accuracy.density}}%{% else %}—{% endif %}</strong></div>
-<div class="stat">Priority Direction<strong id="validationDirectionAccuracy">{% if state.operational_evaluation.component_accuracy.direction is not none %}{{state.operational_evaluation.component_accuracy.direction}}%{% else %}—{% endif %}</strong></div>
-<div class="stat">Emergency Class<strong id="validationEmergencyAccuracy">{% if state.operational_evaluation.emergency_accuracy is not none %}{{state.operational_evaluation.emergency_accuracy}}%{% else %}Needs emergency cases{% endif %}</strong></div>
-<div class="stat">Signal Phase<strong id="validationSignalAccuracy">{% if state.operational_evaluation.component_accuracy.signal is not none %}{{state.operational_evaluation.component_accuracy.signal}}%{% else %}—{% endif %}</strong></div>
+<div class="stat">Traffic Density<strong id="validationDensityAccuracy">—</strong></div>
+<div class="stat">Priority Direction<strong id="validationDirectionAccuracy">—</strong></div>
+<div class="stat">Emergency Macro Recall<strong id="validationEmergencyAccuracy">—</strong></div>
+<div class="stat">Signal Phase<strong id="validationSignalAccuracy">—</strong></div>
 </div>
-<p class="muted" id="emergencyValidationNote">Emergency validation cases: {{state.operational_evaluation.emergency_positive_samples}} positive and {{state.operational_evaluation.emergency_negative_samples}} negative. At least 5 of each are required before showing emergency-class accuracy.</p>
+<p class="muted" id="componentValidationNote">Component scores appear after at least {{state.operational_evaluation.minimum_component_samples}} complete labelled frames. They are early indicators until a larger, varied validation set is collected.</p>
+<p class="muted" id="emergencyClassCoverage">Emergency class coverage: loading…</p>
+<p class="muted" id="emergencyValidationNote">Emergency macro recall requires at least {{state.operational_evaluation.minimum_emergency_class_samples}} actual examples in each class: No emergency, Ambulance and Fire truck.</p>
+<p class="muted">The 95% confidence interval shows sampling uncertainty. It does not guarantee performance on other cameras, roads, weather or lighting. Unique frames and five-second spacing do not by themselves guarantee diverse test scenes.</p>
 </div>
 <div class="card"><h2>🧾 Validate This Camera Result</h2>
 <p class="muted">Independently inspect the processed camera frame. Select what a human reviewer considers correct, not what the AI displays. Each unique captured frame can be submitted only once; the saved prediction is tied to that exact frame.</p>
@@ -134,24 +140,75 @@ function controlHeaders(extra = {}) {
 
 function renderOperationalEvaluation(evaluation) {
   if (!evaluation) return;
+
+  const total = Number(evaluation.total_samples || 0);
+  const minimum = Number(evaluation.minimum_samples || 50);
+  const componentMinimum = Number(evaluation.minimum_component_samples || 10);
   const accuracy = document.getElementById('operationalAccuracy');
   const samples = document.getElementById('operationalSamples');
   const correct = document.getElementById('operationalCorrect');
+  const interval = document.getElementById('operationalAccuracyCI');
   const note = document.getElementById('operationalAccuracyNote');
-  if (accuracy) accuracy.textContent = evaluation.accuracy === null ? 'Not yet tested' : Number(evaluation.accuracy).toFixed(1) + '%';
-  if (samples) samples.textContent = (evaluation.total_samples || 0) + ' / ' + (evaluation.minimum_samples || 50);
-  if (correct) correct.textContent = evaluation.correct_samples || 0;
-  if (note) note.textContent = evaluation.accuracy === null
-    ? 'Collect ' + evaluation.remaining_samples + ' more independently labelled samples to unlock the overall exact-match percentage. This is not AI confidence.'
-    : 'Human-verified exact match: ' + evaluation.correct_samples + ' of ' + evaluation.total_samples + ' complete scene decisions matched all four labelled outputs.';
+  const progress = document.getElementById('operationalProgress');
+
+  if (accuracy) accuracy.textContent = evaluation.accuracy === null
+    ? 'Not yet tested' : Number(evaluation.accuracy).toFixed(1) + '%';
+  if (samples) samples.textContent = total + ' / ' + minimum;
+  if (correct) correct.textContent = Number(evaluation.correct_samples || 0);
+  if (interval) {
+    const ci = evaluation.accuracy_ci_95;
+    interval.textContent = ci
+      ? Number(ci.lower).toFixed(1) + '–' + Number(ci.upper).toFixed(1) + '%'
+      : 'Not available';
+  }
+  if (progress) progress.style.width = Math.min(100, total / minimum * 100) + '%';
+
+  if (note) {
+    note.textContent = evaluation.accuracy === null
+      ? 'Collect ' + Number(evaluation.remaining_samples || 0) +
+        ' more complete, human-reviewed frames. Overall exact match stays locked until ' +
+        minimum + ' frames; component indicators become available after ' +
+        componentMinimum + '. This is not AI confidence.'
+      : 'Strict exact match: ' + Number(evaluation.correct_samples || 0) +
+        ' of ' + total + ' scenes had all four outputs correct. The 95% Wilson interval is shown to communicate sampling uncertainty.';
+  }
+
   const components = evaluation.component_accuracy || {};
-  const show = (value) => value === null || value === undefined ? '—' : Number(value).toFixed(1) + '%';
+  const show = (value) => value === null || value === undefined
+    ? '—' : Number(value).toFixed(1) + '%';
   document.getElementById('validationDensityAccuracy').textContent = show(components.density);
   document.getElementById('validationDirectionAccuracy').textContent = show(components.direction);
   document.getElementById('validationSignalAccuracy').textContent = show(components.signal);
-  document.getElementById('validationEmergencyAccuracy').textContent = show(evaluation.emergency_accuracy);
-  document.getElementById('emergencyValidationNote').textContent =
-    'Emergency validation cases: ' + evaluation.emergency_positive_samples + ' positive and ' + evaluation.emergency_negative_samples + ' negative. At least 5 of each are required before showing emergency-class accuracy.';
+  document.getElementById('validationEmergencyAccuracy').textContent =
+    show(evaluation.emergency_macro_recall ?? evaluation.emergency_accuracy);
+
+  const componentNote = document.getElementById('componentValidationNote');
+  if (componentNote) {
+    componentNote.textContent = total < componentMinimum
+      ? 'Component scores unlock after ' + componentMinimum + ' complete labelled frames. Current progress: ' + total + '/' + componentMinimum + '.'
+      : 'Preliminary component match rates are based on ' + total +
+        ' human-reviewed frames. Density, direction and signal scores are calculated separately; they are not the overall exact-match score.';
+  }
+
+  const counts = evaluation.emergency_class_counts || {};
+  const emergencyMinimum = Number(evaluation.minimum_emergency_class_samples || 10);
+  const coverage = document.getElementById('emergencyClassCoverage');
+  if (coverage) {
+    coverage.textContent = 'Emergency class coverage — No emergency: ' +
+      Number(counts.none || 0) + '/' + emergencyMinimum +
+      ' · Ambulance: ' + Number(counts.ambulance || 0) + '/' + emergencyMinimum +
+      ' · Fire truck: ' + Number(counts.fire_truck || 0) + '/' + emergencyMinimum;
+  }
+
+  const emergencyNote = document.getElementById('emergencyValidationNote');
+  if (emergencyNote) {
+    emergencyNote.textContent = evaluation.emergency_macro_recall === null
+      ? 'Emergency macro recall is waiting for all three classes to reach ' +
+        emergencyMinimum + ' human-labelled examples. It will not be shown using only negative examples or one emergency type.'
+      : 'Three-class macro recall: ' +
+        Number(evaluation.emergency_macro_recall).toFixed(1) +
+        '%. This gives equal weight to No emergency, Ambulance and Fire truck instead of letting the largest class dominate. See the saved evaluation report for per-class precision, recall and confusion counts.';
+  }
 }
 
 function render(s) {
