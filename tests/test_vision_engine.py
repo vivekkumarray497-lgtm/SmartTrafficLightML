@@ -64,7 +64,8 @@ class VisionEngineTests(unittest.TestCase):
 
         self.assertAlmostEqual(model.kwargs["conf"], 0.18)
         self.assertEqual(model.kwargs["imgsz"], 960)
-        self.assertEqual(model.kwargs["max_det"], 500)
+        self.assertEqual(model.kwargs["max_det"], 1000)
+        self.assertAlmostEqual(model.kwargs["iou"], 0.65)
         self.assertEqual(model.kwargs["classes"], [0, 1, 2, 3, 5, 7])
 
     def test_custom_four_class_model_maps_its_own_class_ids(self):
@@ -183,14 +184,73 @@ class VisionEngineTests(unittest.TestCase):
         self.assertFalse(engine.history)
         self.assertFalse(engine.last_seen)
 
+    def test_dense_tile_inference_adds_missed_vehicles_without_counting_duplicate_boxes(self):
+        class DenseFakeModel(FakeModel):
+            def __init__(self):
+                super().__init__([
+                    FakeBox(2, 0.90, [10, 10, 55, 60]),
+                    FakeBox(2, 0.88, [80, 10, 125, 60]),
+                    FakeBox(2, 0.86, [150, 10, 195, 60]),
+                    FakeBox(2, 0.84, [220, 10, 265, 60]),
+                ])
+                self.tile_calls = 0
+
+            def predict(self, sources, **kwargs):
+                self.predict_kwargs = kwargs
+                self.tile_calls += 1
+                return [
+                    FakeResult([FakeBox(2, 0.82, [300, 100, 360, 170])]),
+                    FakeResult([FakeBox(2, 0.80, [80, 10, 125, 60])]),
+                    FakeResult([]),
+                    FakeResult([]),
+                ]
+
+        model = DenseFakeModel()
+        engine = VisionEngine(model)
+        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertEqual(model.tile_calls, 1)
+        self.assertEqual(metrics["primary_vehicle_detections"], 4)
+        self.assertEqual(metrics["tiled_detections_added"], 1)
+        self.assertTrue(metrics["tiled_inference_used"])
+        self.assertEqual(metrics["cars"], 5)
+        self.assertEqual(metrics["total_vehicles"], 5)
+
+    def test_dense_tile_inference_skips_light_traffic(self):
+        model = FakeModel([
+            FakeBox(2, 0.90, [100, 100, 220, 220]),
+            FakeBox(3, 0.88, [250, 100, 350, 220]),
+        ])
+        engine = VisionEngine(model)
+        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertFalse(metrics["tiled_inference_used"])
+        self.assertEqual(metrics["tiled_detections_added"], 0)
+        self.assertEqual(metrics["total_vehicles"], 2)
+        self.assertFalse(hasattr(model, "predict_kwargs"))
+
+    def test_dense_tile_inference_can_be_disabled(self):
+        model = FakeModel([
+            FakeBox(2, 0.90, [10, 10, 55, 60]),
+            FakeBox(2, 0.88, [80, 10, 125, 60]),
+            FakeBox(2, 0.86, [150, 10, 195, 60]),
+            FakeBox(2, 0.84, [220, 10, 265, 60]),
+        ])
+        with patch.dict("os.environ", {"TRAFFIC_TILED_INFERENCE": "false"}):
+            engine = VisionEngine(model)
+            metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertFalse(metrics["tiled_inference_used"])
+        self.assertEqual(metrics["total_vehicles"], 4)
+
     def test_invalid_environment_settings_fall_back_safely(self):
         with patch.dict("os.environ", {
             "TRAFFIC_DETECTION_CONF": "bad",
             "TRAFFIC_IMAGE_SIZE": "bad",
         }):
             engine = VisionEngine(FakeModel([]))
-        self.assertAlmostEqual(engine.confidence_threshold, 0.22)
-        self.assertEqual(engine.image_size, 960)
+        self.assertAlmostEqual(engine.confidence_threshold, 0.18)
+        self.assertEqual(engine.image_size, 1280)
 
 
 if __name__ == "__main__":
