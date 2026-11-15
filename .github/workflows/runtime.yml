@@ -47,6 +47,10 @@ jobs:
           client = app.app.test_client()
           page = client.get("/")
           assert page.status_code == 200, page.data.decode()
+          page_html = page.data.decode()
+          assert 'id="liveFramesProcessed"' in page_html
+          assert 'id="liveVehiclesDetected"' in page_html
+          assert 'human-verified accuracy samples' in page_html
           with client.session_transaction() as session:
               csrf_token = session["csrf_token"]
           csrf_headers = {"X-CSRF-Token": csrf_token}
@@ -167,6 +171,8 @@ jobs:
           frame_state = frame.get_json()
           assert frame_state["traffic"] == 1
           assert frame_state["frame_id"], frame_state
+          assert frame_state["frames_processed"] >= 1, frame_state
+          assert frame_state["operational_evaluation"]["total_samples"] == 0, frame_state
           assert frame_state["pedestrian_directions"]["North"] == 0
 
           app.vision.process = original_process
