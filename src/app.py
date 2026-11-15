@@ -31,6 +31,7 @@ HISTORY_PATH = os.path.join(BASE_DIR, "data", "traffic_history.csv")
 POLICY_REPORT_PATH = os.path.join(BASE_DIR, "reports", "traffic_policy_evaluation.json")
 OPERATIONAL_VALIDATION_PATH = os.path.join(BASE_DIR, "data", "operational_validation.csv")
 OPERATIONAL_REPORT_PATH = os.path.join(BASE_DIR, "reports", "operational_evaluation.json")
+VERIFIED_SIGNAL_TRAINING_PATH = os.path.join(BASE_DIR, "data", "verified_signal_training.csv")
 
 app = Flask(__name__, template_folder=TEMPLATE_DIR)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
@@ -100,6 +101,7 @@ from adaptive_controller import AdaptiveController
 from analytics_store import AnalyticsStore
 from emergency_detector import EmergencyDetector
 from operational_evaluation import OperationalEvaluator, DuplicateSceneError, SampleIntervalError
+from verified_signal_data import VerifiedSignalDataStore
 from camera_config import CAMERAS, ACTIVE_CAMERA_ID
 
 model = joblib.load(MODEL_PATH)
@@ -132,6 +134,7 @@ operational_evaluator = OperationalEvaluator(
     OPERATIONAL_REPORT_PATH,
     minimum_samples=50,
 )
+verified_signal_data = VerifiedSignalDataStore(VERIFIED_SIGNAL_TRAINING_PATH)
 
 camera = None
 camera_source_id = None
@@ -512,6 +515,23 @@ def update_state(metrics):
         frame_id = str(metrics.get("frame_id") or "")
         if frame_id:
             frame_observations[frame_id] = {
+                "features": {
+                    "cars": metrics.get("cars", 0),
+                    "bikes": metrics.get("bikes", 0),
+                    "buses": metrics.get("buses", 0),
+                    "trucks": metrics.get("trucks", 0),
+                    "auto_rickshaws": metrics.get("auto_rickshaws", 0),
+                    "total_vehicles": metrics.get("total_vehicles", 0),
+                    "pedestrians": metrics.get("pedestrians", 0),
+                    "avg_speed": metrics.get("avg_speed", 0),
+                    "queue_length": metrics.get("queue_length", 0),
+                    "avg_waiting_time": metrics.get("avg_waiting_time", 0),
+                    "directions": dict(metrics.get("directions", {})),
+                    "pedestrian_directions": dict(metrics.get("pedestrian_directions", {})),
+                    "camera_direction": active_camera_direction,
+                    "input_frame_width": metrics.get("input_frame_width", 0),
+                    "input_frame_height": metrics.get("input_frame_height", 0),
+                },
                 "density": metrics["density"],
                 "direction": active,
                 "emergency_type": (
@@ -739,9 +759,23 @@ def api_validation_sample():
             "signal": payload.get("signal"),
         }
         evaluation = operational_evaluator.record(predicted, actual, scene_id)
+        try:
+            training_summary = verified_signal_data.record(
+                scene_id, active_camera_id, predicted.get("features", {}), actual
+            )
+            training_capture = {"saved": True, **training_summary}
+        except (OSError, ValueError) as training_error:
+            app.logger.exception("Verified signal training sample could not be saved")
+            training_capture = {"saved": False, "error": str(training_error)[:160]}
         return jsonify({
-            "message": "Human-verified validation sample saved for the selected camera frame.",
+            "message": (
+                "Human-verified sample saved. Camera features and the reviewed signal "
+                "label were added to the separate verified training dataset."
+                if training_capture["saved"] else
+                "Operational validation was saved, but the separate training-data copy failed."
+            ),
             "evaluation": evaluation,
+            "training_data": training_capture,
         })
     except DuplicateSceneError as exc:
         return jsonify({"error": str(exc)}), 409
