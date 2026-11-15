@@ -105,6 +105,10 @@ jobs:
           assert health_data["status"] == "degraded", health_data
           assert health_data["emergency_detector_status"] == "not_loaded", health_data
           assert health_data["control_auth_required"] is True, health_data
+          assert health_data["dense_tile_inference_enabled"] is True, health_data
+          assert health_data["dense_tile_detection_trigger"] == 3, health_data
+          assert health_data["vehicle_detection_image_size"] == 1280, health_data
+          assert health_data["vehicle_detection_max_detections"] == 1000, health_data
 
           state = client.get("/api/state")
           assert state.status_code == 200, state.data.decode()
