@@ -36,6 +36,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pandas numpy scikit-learn==1.8.0 joblib
 
+      - name: Test verified camera-data collection and grouped splitting
+        run: python -m unittest discover -s tests -p 'test_verified_signal_data.py' -v
+
       - name: Evaluate legacy signal-state model
         run: python src/train_model.py
 
@@ -53,5 +56,6 @@ jobs:
             model/random_forest_model.pkl
             model/traffic_priority_model.pkl
             dataset/traffic_priority_training_data.csv
+            reports/verified_camera_signal_evaluation.json
           if-no-files-found: warn
           retention-days: 30
