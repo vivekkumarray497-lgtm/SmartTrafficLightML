@@ -130,7 +130,7 @@ For live-camera accuracy, evaluate predictions against manually annotated frames
 
 ## Improving vehicle detection in crowded traffic
 
-The default live path uses the original single-pass YOLO tracker profile to keep camera inference responsive: confidence threshold 0.22, image size 960, NMS IoU 0.50, and maximum 500 detections. These settings are a conservative baseline, not a guarantee that every vehicle will be detected.
+The live browser camera requests up to 1280×720, sends the source frame at up to 1280 pixels wide, and uses JPEG quality 0.82 to avoid the earlier 800-pixel downscale. The default single-pass YOLO tracker profile remains confidence threshold 0.22, image size 960, NMS IoU 0.50, and maximum 500 detections. On a GPU-backed Colab runtime, set `TRAFFIC_IMAGE_SIZE=1280` before starting Flask to let YOLO retain more detail for small and distant vehicles. If inference becomes too slow, return to 960. The dashboard reports the actual input frame size and per-frame processing time so the trade-off can be checked.
 
 An optional four-crop dense-scene pass is available through `TRAFFIC_TILED_INFERENCE=1`, but it is disabled by default because loading a second YOLO model and scanning four crops can increase memory use and frame latency on limited Colab GPUs. Enable it only after measuring the baseline and confirming that the runtime has sufficient GPU memory and processing headroom. The scan starts when at least three vehicles are detected in the full frame, maps crop boxes back to the original frame, and removes overlapping duplicate boxes.
 
