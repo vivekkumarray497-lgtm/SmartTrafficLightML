@@ -11,3 +11,6 @@ data/operational_validation.csv
 reports/operational_evaluation.json
 model/emergency_vehicle_detector.pt
 model/traffic_vehicle_detector.pt
+data/verified_signal_training.csv
+model/verified_camera_signal_model.pkl
+reports/verified_camera_signal_evaluation.json
