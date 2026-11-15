@@ -184,32 +184,38 @@ class VisionEngineTests(unittest.TestCase):
         self.assertFalse(engine.history)
         self.assertFalse(engine.last_seen)
 
-    def test_dense_tile_inference_adds_missed_vehicles_without_counting_duplicate_boxes(self):
-        class DenseFakeModel(FakeModel):
+    def test_dense_tile_inference_adds_missed_vehicles_and_removes_duplicates(self):
+        base_model = FakeModel([
+            FakeBox(2, 0.90, [10, 10, 55, 60]),
+            FakeBox(2, 0.88, [80, 10, 125, 60]),
+            FakeBox(2, 0.86, [150, 10, 195, 60]),
+            FakeBox(2, 0.84, [220, 10, 265, 60]),
+        ])
+
+        class TileFakeModel:
             def __init__(self):
-                super().__init__([
-                    FakeBox(2, 0.90, [10, 10, 55, 60]),
-                    FakeBox(2, 0.88, [80, 10, 125, 60]),
-                    FakeBox(2, 0.86, [150, 10, 195, 60]),
-                    FakeBox(2, 0.84, [220, 10, 265, 60]),
-                ])
                 self.tile_calls = 0
+                self.predict_kwargs = None
 
             def predict(self, sources, **kwargs):
                 self.predict_kwargs = kwargs
                 self.tile_calls += 1
                 return [
-                    FakeResult([FakeBox(2, 0.82, [300, 100, 360, 170])]),
-                    FakeResult([FakeBox(2, 0.80, [80, 10, 125, 60])]),
+                    FakeResult([
+                        FakeBox(2, 0.82, [300, 100, 360, 170]),
+                        FakeBox(2, 0.80, [80, 10, 125, 60]),
+                    ]),
+                    FakeResult([]),
                     FakeResult([]),
                     FakeResult([]),
                 ]
 
-        model = DenseFakeModel()
-        engine = VisionEngine(model)
+        tile_model = TileFakeModel()
+        engine = VisionEngine(base_model, tile_model_factory=lambda: tile_model)
         metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
 
-        self.assertEqual(model.tile_calls, 1)
+        self.assertEqual(tile_model.tile_calls, 1)
+        self.assertEqual(tile_model.predict_kwargs["imgsz"], 960)
         self.assertEqual(metrics["primary_vehicle_detections"], 4)
         self.assertEqual(metrics["tiled_detections_added"], 1)
         self.assertTrue(metrics["tiled_inference_used"])
