@@ -56,16 +56,16 @@ class VisionEngineTests(unittest.TestCase):
     def test_vehicle_inference_uses_recall_focused_settings(self):
         model = FakeModel([])
         with patch.dict("os.environ", {
-            "TRAFFIC_DETECTION_CONF": "0.18",
+            "TRAFFIC_DETECTION_CONF": "0.22",
             "TRAFFIC_IMAGE_SIZE": "960",
         }):
             engine = VisionEngine(model)
             engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
 
-        self.assertAlmostEqual(model.kwargs["conf"], 0.18)
+        self.assertAlmostEqual(model.kwargs["conf"], 0.22)
         self.assertEqual(model.kwargs["imgsz"], 960)
-        self.assertEqual(model.kwargs["max_det"], 1000)
-        self.assertAlmostEqual(model.kwargs["iou"], 0.65)
+        self.assertEqual(model.kwargs["max_det"], 500)
+        self.assertAlmostEqual(model.kwargs["iou"], 0.50)
         self.assertEqual(model.kwargs["classes"], [0, 1, 2, 3, 5, 7])
 
     def test_custom_four_class_model_maps_its_own_class_ids(self):
@@ -211,8 +211,9 @@ class VisionEngineTests(unittest.TestCase):
                 ]
 
         tile_model = TileFakeModel()
-        engine = VisionEngine(base_model, tile_model_factory=lambda: tile_model)
-        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+        with patch.dict("os.environ", {"TRAFFIC_TILED_INFERENCE": "1"}):
+            engine = VisionEngine(base_model, tile_model_factory=lambda: tile_model)
+            metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
 
         self.assertEqual(tile_model.tile_calls, 1)
         self.assertEqual(tile_model.predict_kwargs["imgsz"], 960)
@@ -228,11 +229,12 @@ class VisionEngineTests(unittest.TestCase):
             FakeBox(3, 0.88, [250, 100, 350, 220]),
         ])
         factory_calls = []
-        engine = VisionEngine(
-            model,
-            tile_model_factory=lambda: factory_calls.append(True),
-        )
-        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+        with patch.dict("os.environ", {"TRAFFIC_TILED_INFERENCE": "1"}):
+            engine = VisionEngine(
+                model,
+                tile_model_factory=lambda: factory_calls.append(True),
+            )
+            metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
 
         self.assertFalse(metrics["tiled_inference_used"])
         self.assertEqual(metrics["tiled_detections_added"], 0)
@@ -254,14 +256,29 @@ class VisionEngineTests(unittest.TestCase):
         self.assertFalse(metrics["tiled_inference_used"])
         self.assertEqual(metrics["total_vehicles"], 4)
 
+    def test_dense_tile_inference_is_disabled_by_default(self):
+        model = FakeModel([
+            FakeBox(2, 0.90, [10, 10, 55, 60]),
+            FakeBox(2, 0.88, [80, 10, 125, 60]),
+            FakeBox(2, 0.86, [150, 10, 195, 60]),
+        ])
+        engine = VisionEngine(model, tile_model_factory=lambda: FakeModel([]))
+        metrics, _ = engine.process(np.zeros((360, 640, 3), dtype=np.uint8))
+
+        self.assertFalse(engine.tiled_inference_enabled)
+        self.assertFalse(metrics["tiled_inference_used"])
+        self.assertEqual(metrics["total_vehicles"], 3)
+
     def test_invalid_environment_settings_fall_back_safely(self):
         with patch.dict("os.environ", {
             "TRAFFIC_DETECTION_CONF": "bad",
             "TRAFFIC_IMAGE_SIZE": "bad",
         }):
             engine = VisionEngine(FakeModel([]))
-        self.assertAlmostEqual(engine.confidence_threshold, 0.18)
-        self.assertEqual(engine.image_size, 1280)
+        self.assertAlmostEqual(engine.confidence_threshold, 0.22)
+        self.assertEqual(engine.image_size, 960)
+        self.assertAlmostEqual(engine.nms_iou_threshold, 0.50)
+        self.assertEqual(engine.max_detections, 500)
 
 
 if __name__ == "__main__":
