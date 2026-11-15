@@ -341,6 +341,7 @@ class VisionEngine:
         return primary_vehicle_count, added, True
 
     def process(self, frame):
+        processing_started = time.perf_counter()
         emergency_input = frame.copy()
 
         h, w = frame.shape[:2]
@@ -568,6 +569,9 @@ class VisionEngine:
             "queue_length": queue_length,
             "queue_roi": list(self.queue_roi),
             "avg_waiting_time": avg_waiting_time,
+            "input_frame_width": int(w),
+            "input_frame_height": int(h),
+            "processing_ms": round((time.perf_counter() - processing_started) * 1000, 1),
             "emergency": emergency,
             "emergency_type": emergency_type,
             "emergency_direction": emergency_direction,
