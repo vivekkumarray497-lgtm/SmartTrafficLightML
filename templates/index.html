@@ -63,6 +63,7 @@
 <p class="muted" id="componentValidationNote">Component scores appear after at least {{state.operational_evaluation.minimum_component_samples}} complete labelled frames. They are early indicators until a larger, varied validation set is collected.</p>
 <p class="muted" id="emergencyClassCoverage">Emergency class coverage: loading…</p>
 <p class="muted" id="emergencyValidationNote">Emergency macro recall requires at least {{state.operational_evaluation.minimum_emergency_class_samples}} actual examples in each class: No emergency, Ambulance and Fire truck.</p>
+<p class="muted" id="emergencyClassMetrics">Per-class precision and recall will appear as labelled examples are collected.</p>
 <p class="muted">The 95% confidence interval shows sampling uncertainty. It does not guarantee performance on other cameras, roads, weather or lighting. Unique frames and five-second spacing do not by themselves guarantee diverse test scenes.</p>
 </div>
 <div class="card"><h2>🧾 Validate This Camera Result</h2>
@@ -207,7 +208,26 @@ function renderOperationalEvaluation(evaluation) {
         emergencyMinimum + ' human-labelled examples. It will not be shown using only negative examples or one emergency type.'
       : 'Three-class macro recall: ' +
         Number(evaluation.emergency_macro_recall).toFixed(1) +
-        '%. This gives equal weight to No emergency, Ambulance and Fire truck instead of letting the largest class dominate. See the saved evaluation report for per-class precision, recall and confusion counts.';
+        '%. This gives equal weight to No emergency, Ambulance and Fire truck instead of letting the largest class dominate.';
+
+  }
+  const classRecall = evaluation.emergency_class_recall || {};
+  const classPrecision = evaluation.emergency_class_precision || {};
+  const classSupport = counts;
+  const classMetric = (label, shortName) => {
+    const recallValue = classRecall[label];
+    const precisionValue = classPrecision[label];
+    const support = Number(classSupport[label] || 0);
+    return shortName + ': recall ' + show(recallValue) +
+      ', precision ' + show(precisionValue) + ' (' + support + ' actual)';
+  };
+  const classMetrics = document.getElementById('emergencyClassMetrics');
+  if (classMetrics) {
+    classMetrics.textContent = 'Per-class performance — ' +
+      classMetric('none', 'No emergency') + ' · ' +
+      classMetric('ambulance', 'Ambulance') + ' · ' +
+      classMetric('fire_truck', 'Fire truck') +
+      '. Values are preliminary until each class reaches ' + emergencyMinimum + ' examples.';
   }
 }
 
