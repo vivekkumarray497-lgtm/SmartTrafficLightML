@@ -183,7 +183,8 @@ traffic_data = {
     "vehicle_confidence": None, "vehicle_confidence_samples": 0,
     "vehicle_class_confidence": {}, "pedestrian_confidence": None,
     "primary_vehicle_detections": 0, "tiled_inference_used": False,
-    "tiled_detections_added": 0, "tiled_inference_error": ""
+    "tiled_detections_added": 0, "tiled_inference_error": "",
+    "input_frame_width": 0, "input_frame_height": 0, "processing_ms": 0.0
 }
 
 def evaluate_model_accuracy():
@@ -491,6 +492,9 @@ def update_state(metrics):
             "tiled_inference_used": bool(metrics.get("tiled_inference_used", False)),
             "tiled_detections_added": int(metrics.get("tiled_detections_added", 0)),
             "tiled_inference_error": str(metrics.get("tiled_inference_error", "")),
+            "input_frame_width": int(metrics.get("input_frame_width", 0)),
+            "input_frame_height": int(metrics.get("input_frame_height", 0)),
+            "processing_ms": float(metrics.get("processing_ms", 0.0)),
             "directions": dict(metrics["directions"]),
             "pedestrian_directions": dict(metrics.get(
                 "pedestrian_directions",
@@ -597,6 +601,9 @@ def reset_state():
             "tiled_inference_used": False,
             "tiled_detections_added": 0,
             "tiled_inference_error": "",
+            "input_frame_width": 0,
+            "input_frame_height": 0,
+            "processing_ms": 0.0,
             "mode": control_mode,
             "countdown": ALL_RED_DURATION,
             "updated_at": "Camera stopped",
