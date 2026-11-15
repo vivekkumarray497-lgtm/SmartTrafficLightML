@@ -720,6 +720,42 @@ def api_validation_sample():
         app.logger.exception("Could not save operational validation sample")
         return jsonify({"error": f"Could not save validation sample: {str(exc)[:120]}"}), 500
 
+@app.route("/api/control/verify", methods=["POST"])
+def api_control_verify():
+    """Verify the dashboard PIN without changing any traffic-control state."""
+    supplied_control_token = request.headers.get("X-Control-Token", "")
+    now = time.time()
+    attempts = session.get("control_pin_attempts", [])
+    attempts = [
+        float(attempt)
+        for attempt in attempts
+        if now - float(attempt) < 60
+    ]
+
+    if len(attempts) >= 5:
+        session["control_pin_attempts"] = attempts
+        return jsonify({
+            "valid": False,
+            "error": "Too many incorrect PIN attempts. Please wait 60 seconds and try again."
+        }), 429
+
+    if not supplied_control_token or not hmac.compare_digest(
+        CONTROL_API_TOKEN, supplied_control_token
+    ):
+        attempts.append(now)
+        session["control_pin_attempts"] = attempts
+        return jsonify({
+            "valid": False,
+            "error": "Incorrect dashboard PIN. Check the PIN printed in the Flask server output."
+        }), 401
+
+    session.pop("control_pin_attempts", None)
+    return jsonify({
+        "valid": True,
+        "message": "Dashboard PIN verified. Camera and dashboard controls are unlocked for this page session."
+    })
+
+
 @app.route("/api/health")
 def api_health():
     with camera_lock:
