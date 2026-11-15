@@ -16,10 +16,16 @@ class SampleIntervalError(ValueError):
 
 class OperationalEvaluator:
     FIELDS = ("density", "direction", "emergency_type", "signal")
+    EMERGENCY_CLASSES = ("none", "ambulance", "fire_truck")
+    EMERGENCY_LABELS = {
+        "none": "No emergency",
+        "ambulance": "Ambulance",
+        "fire_truck": "Fire truck",
+    }
     ALLOWED = {
         "density": {"NO TRAFFIC", "LOW", "MEDIUM", "HIGH", "VERY HIGH"},
         "direction": {"North", "South", "East", "West"},
-        "emergency_type": {"none", "ambulance", "fire_truck"},
+        "emergency_type": set(EMERGENCY_CLASSES),
         "signal": {"Red", "Yellow", "Green", "All Red"},
     }
 
@@ -29,10 +35,16 @@ class OperationalEvaluator:
         report_path,
         minimum_samples=50,
         minimum_sample_interval_seconds=5.0,
+        minimum_component_samples=10,
+        minimum_emergency_class_samples=10,
     ):
         self.csv_path = csv_path
         self.report_path = report_path
         self.minimum_samples = max(1, int(minimum_samples))
+        self.minimum_component_samples = max(1, int(minimum_component_samples))
+        self.minimum_emergency_class_samples = max(
+            1, int(minimum_emergency_class_samples)
+        )
         self.minimum_sample_interval_seconds = max(
             0.0, float(minimum_sample_interval_seconds)
         )
@@ -81,6 +93,38 @@ class OperationalEvaluator:
         if value not in cls.ALLOWED[field]:
             raise ValueError(f"Invalid {field} value: {value or '(empty)'}")
         return value
+
+    @staticmethod
+    def _wilson_interval(correct, total, z=1.96):
+        """Return a two-sided 95% Wilson score interval in percent."""
+        if total <= 0:
+            return None
+        proportion = correct / total
+        z_squared = z * z
+        denominator = 1 + z_squared / total
+        center = (proportion + z_squared / (2 * total)) / denominator
+        margin = (
+            z
+            * math.sqrt(
+                (proportion * (1 - proportion) / total)
+                + (z_squared / (4 * total * total))
+            )
+            / denominator
+        )
+        lower = max(0.0, center - margin) * 100
+        upper = min(1.0, center + margin) * 100
+        return {"lower": round(lower, 1), "upper": round(upper, 1)}
+
+    @classmethod
+    def _is_complete_row(cls, row):
+        if not str(row.get("scene_id", "")).strip():
+            return False
+        for field in cls.FIELDS:
+            if row.get(f"predicted_{field}") not in cls.ALLOWED[field]:
+                return False
+            if row.get(f"actual_{field}") not in cls.ALLOWED[field]:
+                return False
+        return True
 
     def record(self, prediction, actual, scene_id):
         scene_id = str(scene_id or "").strip()
@@ -156,65 +200,154 @@ class OperationalEvaluator:
         except (OSError, csv.Error):
             rows = []
 
-        # Rows from the older schema have no scene_id and cannot be verified
-        # as unique camera frames. Keep them in the CSV for audit history,
-        # but exclude them from the measured validation sample count.
-        valid_rows = [row for row in rows if str(row.get("scene_id", "")).strip()]
+        # Older or partially migrated rows are retained for audit history but
+        # excluded from scores unless all four prediction/ground-truth pairs exist.
+        valid_rows = [row for row in rows if self._is_complete_row(row)]
         total = len(valid_rows)
+        excluded = len(rows) - total
+        matches_by_field = {
+            field: sum(
+                row.get(f"predicted_{field}") == row.get(f"actual_{field}")
+                for row in valid_rows
+            )
+            for field in self.FIELDS
+        }
         correct = sum(
-            str(row.get("exact_match", "0")) == "1" for row in valid_rows
+            all(
+                row.get(f"predicted_{field}") == row.get(f"actual_{field}")
+                for field in self.FIELDS
+            )
+            for row in valid_rows
         )
+
         enough_samples = total >= self.minimum_samples
+        enough_component_samples = total >= self.minimum_component_samples
+        emergency_class_counts = {
+            label: sum(row.get("actual_emergency_type") == label for row in valid_rows)
+            for label in self.EMERGENCY_CLASSES
+        }
+        emergency_class_recall = {}
+        emergency_class_precision = {}
+        emergency_confusion_matrix = {
+            actual_label: {
+                predicted_label: 0 for predicted_label in self.EMERGENCY_CLASSES
+            }
+            for actual_label in self.EMERGENCY_CLASSES
+        }
+
+        for label in self.EMERGENCY_CLASSES:
+            support = emergency_class_counts[label]
+            true_positives = sum(
+                row.get("actual_emergency_type") == label
+                and row.get("predicted_emergency_type") == label
+                for row in valid_rows
+            )
+            predicted_count = sum(
+                row.get("predicted_emergency_type") == label for row in valid_rows
+            )
+            emergency_class_recall[label] = (
+                round(true_positives / support * 100, 1) if support else None
+            )
+            emergency_class_precision[label] = (
+                round(true_positives / predicted_count * 100, 1)
+                if predicted_count else None
+            )
+
+        for row in valid_rows:
+            actual_label = row.get("actual_emergency_type")
+            predicted_label = row.get("predicted_emergency_type")
+            emergency_confusion_matrix[actual_label][predicted_label] += 1
+
+        enough_emergency_examples = all(
+            emergency_class_counts[label] >= self.minimum_emergency_class_samples
+            for label in self.EMERGENCY_CLASSES
+        )
+        emergency_macro_recall = (
+            round(
+                sum(emergency_class_recall[label] for label in self.EMERGENCY_CLASSES)
+                / len(self.EMERGENCY_CLASSES),
+                1,
+            )
+            if enough_emergency_examples else None
+        )
+
+        positive = emergency_class_counts["ambulance"] + emergency_class_counts["fire_truck"]
+        negative = emergency_class_counts["none"]
+        remaining_by_class = {
+            label: max(
+                0,
+                self.minimum_emergency_class_samples - emergency_class_counts[label],
+            )
+            for label in self.EMERGENCY_CLASSES
+        }
+
         result = {
             "accuracy": round(correct / total * 100, 1) if enough_samples and total else None,
+            "accuracy_ci_95": (
+                self._wilson_interval(correct, total) if enough_samples else None
+            ),
             "correct_samples": int(correct),
             "total_samples": total,
+            "excluded_incomplete_samples": excluded,
             "minimum_samples": self.minimum_samples,
             "remaining_samples": max(0, self.minimum_samples - total),
             "status": "available" if enough_samples else "collecting",
-            "metric": "Human-verified end-to-end exact-match accuracy",
-            "component_accuracy": {},
-            "emergency_positive_samples": 0,
-            "emergency_negative_samples": 0,
-            "emergency_accuracy": None,
-            "emergency_validation_status": "needs at least 5 positive and 5 negative labelled samples",
+            "metric": "Human-reviewed strict end-to-end exact-match accuracy",
+            "component_accuracy": {
+                field: (
+                    round(matches_by_field[field] / total * 100, 1)
+                    if enough_component_samples else None
+                )
+                for field in self.FIELDS
+            },
+            "component_sample_count": total,
+            "minimum_component_samples": self.minimum_component_samples,
+            "component_status": (
+                "available" if enough_component_samples else "collecting"
+            ),
+            "emergency_positive_samples": int(positive),
+            "emergency_negative_samples": int(negative),
+            "emergency_class_counts": emergency_class_counts,
+            "emergency_class_recall": emergency_class_recall,
+            "emergency_class_precision": emergency_class_precision,
+            "emergency_confusion_matrix": emergency_confusion_matrix,
+            # Kept for compatibility with the existing dashboard field.
+            # This is macro recall, not ordinary accuracy dominated by the largest class.
+            "emergency_accuracy": emergency_macro_recall,
+            "emergency_macro_recall": emergency_macro_recall,
+            "emergency_metric": "Three-class macro recall",
+            "minimum_emergency_class_samples": self.minimum_emergency_class_samples,
+            "emergency_remaining_by_class": remaining_by_class,
+            "emergency_validation_status": (
+                "available" if enough_emergency_examples else "collecting"
+            ),
         }
 
-        for field in self.FIELDS:
-            if not enough_samples:
-                result["component_accuracy"][field] = None
-            else:
-                matches = sum(
-                    row.get(f"predicted_{field}") == row.get(f"actual_{field}")
-                    for row in valid_rows
-                )
-                result["component_accuracy"][field] = round(matches / total * 100, 1)
-
-        positive = sum(
-            row.get("actual_emergency_type") in {"ambulance", "fire_truck"}
-            for row in valid_rows
-        )
-        negative = sum(
-            row.get("actual_emergency_type") == "none"
-            for row in valid_rows
-        )
-        result["emergency_positive_samples"] = int(positive)
-        result["emergency_negative_samples"] = int(negative)
-        if positive >= 5 and negative >= 5:
-            matches = sum(
-                row.get("predicted_emergency_type") == row.get("actual_emergency_type")
-                for row in valid_rows
+        if enough_emergency_examples:
+            result["emergency_validation_note"] = (
+                "Macro recall averages recall for No emergency, Ambulance and Fire truck "
+                "equally. Per-class recall and precision are available in the report."
             )
-            result["emergency_accuracy"] = round(matches / total * 100, 1)
-            result["emergency_validation_status"] = "available"
+        else:
+            coverage = ", ".join(
+                f"{self.EMERGENCY_LABELS[label]} "
+                f"{emergency_class_counts[label]}/{self.minimum_emergency_class_samples}"
+                for label in self.EMERGENCY_CLASSES
+            )
+            result["emergency_validation_note"] = (
+                "Collect the minimum examples for all three classes: " + coverage + "."
+            )
 
         result["limitations"] = [
             "Ground truth is manually entered by a reviewer who independently checks the scene.",
-            "Each unique captured camera frame can be submitted only once.",
-            f"Validation samples are separated by at least {self.minimum_sample_interval_seconds:g} seconds.",
-            "Overall accuracy is strict exact match across density, priority direction, emergency class and signal phase.",
+            "Each complete, unique captured camera frame can be submitted only once.",
+            f"Validation submissions are separated by at least {self.minimum_sample_interval_seconds:g} seconds.",
+            f"Component indicators require at least {self.minimum_component_samples} complete labelled frames.",
+            f"Overall exact-match accuracy requires at least {self.minimum_samples} complete labelled frames.",
+            "The 95% Wilson interval communicates sampling uncertainty; it does not remove dataset bias.",
+            "Unique frame IDs and time spacing do not guarantee independent or diverse scenes.",
+            "Emergency macro recall is withheld until No emergency, Ambulance and Fire truck each have enough actual examples.",
             "The result applies only to the labelled validation samples and conditions represented.",
-            "Collect diverse scenes; avoid near-identical consecutive frames.",
             "This offline validation metric does not certify road safety or authorize real-world deployment.",
         ]
         return result
