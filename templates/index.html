@@ -86,6 +86,7 @@
 <div class="card"><h2>🧾 Validate This Camera Result</h2>
 <p class="muted">Independently inspect the processed camera frame. Select what a human reviewer considers correct, not what the AI displays. Each unique captured frame can be submitted only once; the saved prediction is tied to that exact frame.</p>
 <p class="muted">A vehicle detection updates the live counters automatically, but it does not increase Verified Frames. To measure accuracy, compare all four AI outputs with the real scene and click Save Human-Verified Sample. Never copy the AI prediction into the actual-answer fields without checking it.</p>
+<p class="muted">Each saved review also stores the matching camera-frame features and human-checked signal phase in a separate local dataset for camera-specific training. The original 2,000-row historical dataset is not changed. Only submit a label after independently checking the real signal phase.</p>
 <div class="row">
 <div><label for="actualDensity">Verified traffic density</label><select id="actualDensity"><option value="">Select actual density</option><option>NO TRAFFIC</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>VERY HIGH</option></select></div>
 <div><label for="actualDirection">Correct priority direction</label><select id="actualDirection"><option value="">Select correct direction</option><option>North</option><option>South</option><option>East</option><option>West</option></select></div>
