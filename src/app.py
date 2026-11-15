@@ -665,6 +665,7 @@ def current_state():
         result["policy_model_metric"] = POLICY_EVALUATION["metric"]
         result["operational_evaluation"] = operational_evaluator.summary()
         result["emergency_priority_min_confidence"] = emergency_detector.priority_min_confidence
+        result["frames_processed"] = int(frame_sequence)
         return result
 
 @app.route("/")
