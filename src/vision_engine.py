@@ -58,10 +58,10 @@ class VisionEngine:
         )
         try:
             self.tiled_detection_trigger = int(
-                os.environ.get("TRAFFIC_TILED_TRIGGER", "4")
+                os.environ.get("TRAFFIC_TILED_TRIGGER", "3")
             )
         except ValueError:
-            self.tiled_detection_trigger = 4
+            self.tiled_detection_trigger = 3
         self.tiled_detection_trigger = min(100, max(2, self.tiled_detection_trigger))
         try:
             self.tile_confidence_threshold = float(
