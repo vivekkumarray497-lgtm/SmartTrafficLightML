@@ -202,7 +202,12 @@ def main():
             with open(REPORT_PATH, "r", encoding="utf-8") as handle:
                 previous_report = json.load(handle)
             previous_split = str(previous_report.get("split", "")).lower()
-            previous_protocol_is_comparable = previous_split.startswith("chronological first 80%")
+            previous_protocol_is_comparable = (
+                previous_split.startswith("chronological first 80%")
+                and previous_report.get("evaluation_protocol_version") == "chronological_holdout_v2"
+                and previous_report.get("active_model_evaluation_status")
+                == "validated_chronological_holdout"
+            )
         except (OSError, ValueError, TypeError):
             previous_protocol_is_comparable = False
 
@@ -261,11 +266,34 @@ def main():
                 "majority-baseline promotion gate. No model was saved."
             )
 
-    active_model = best_model if promoted else joblib.load(MODEL_PATH)
-    y_pred = active_model.predict(X_test[FEATURES])
-    active_accuracy = accuracy_score(y_test, y_pred)
+    candidate_prediction = best_model.predict(X_test)
+    candidate_macro_f1 = f1_score(
+        y_test, candidate_prediction, labels=[0, 1, 2],
+        average="macro", zero_division=0
+    )
+
+    active_accuracy = None
+    active_macro_f1 = None
+    active_model_evaluation_status = "unavailable_legacy_model_not_evaluated"
+    active_prediction = None
+    if promoted:
+        active_accuracy = candidate_accuracy
+        active_macro_f1 = candidate_macro_f1
+        active_prediction = candidate_prediction
+        active_model_evaluation_status = "validated_chronological_holdout"
+    elif previous_accuracy is not None:
+        previous_model = joblib.load(MODEL_PATH)
+        active_prediction = previous_model.predict(X_test[FEATURES])
+        active_accuracy = accuracy_score(y_test, active_prediction)
+        active_macro_f1 = f1_score(
+            y_test, active_prediction, labels=[0, 1, 2],
+            average="macro", zero_division=0
+        )
+        active_model_evaluation_status = "validated_chronological_holdout"
+
     report = {
         "generated_at_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "evaluation_protocol_version": "chronological_holdout_v2",
         "dataset_rows_used": int(len(X)),
         "signal_class_distribution": {SIGNAL_NAMES[int(label)]: int(count) for label, count in y.value_counts().sort_index().items()},
         "train_samples": int(len(X_train)),
@@ -288,33 +316,50 @@ def main():
             if hasattr(best_model, "feature_importances_") else {}
         ),
         "candidate_holdout_accuracy": round(float(candidate_accuracy), 4),
-        "active_model_holdout_accuracy": round(float(active_accuracy), 4),
+        "candidate_holdout_macro_f1": round(float(candidate_macro_f1), 4),
+        "active_model_holdout_accuracy": (
+            None if active_accuracy is None else round(float(active_accuracy), 4)
+        ),
+        "active_model_holdout_macro_f1": (
+            None if active_macro_f1 is None else round(float(active_macro_f1), 4)
+        ),
+        "active_model_evaluation_status": active_model_evaluation_status,
         "promoted_candidate": bool(promoted),
         "cross_validation": cv_results,
-        "classification_report": classification_report(
-            y_test, y_pred, labels=[0, 1, 2], target_names=SIGNAL_NAMES,
-            output_dict=True, zero_division=0
+        "candidate_classification_report": classification_report(
+            y_test, candidate_prediction, labels=[0, 1, 2],
+            target_names=SIGNAL_NAMES, output_dict=True, zero_division=0
         ),
-        "confusion_matrix": confusion_matrix(y_test, y_pred, labels=[0, 1, 2]).tolist(),
-        "note": "This evaluates the tabular signal_status labels only. It is not live-camera or emergency-detection accuracy. A candidate is not promoted unless it beats the majority baseline by at least 1 percentage point and passes the comparable-model gate."
+        "candidate_confusion_matrix": confusion_matrix(
+            y_test, candidate_prediction, labels=[0, 1, 2]
+        ).tolist(),
+        "note": (
+            "Candidate accuracy is measured only after fitting on the first 80% "
+            "of timestamps. A legacy model trained with a different split is not "
+            "evaluated against this holdout because it may already have seen test "
+            "records. The score is tabular signal-label accuracy, not live-camera "
+            "detection or emergency-detection accuracy."
+        )
     }
     os.makedirs(os.path.dirname(REPORT_PATH), exist_ok=True)
     with open(REPORT_PATH, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
 
-    active_macro_f1 = f1_score(
-        y_test, y_pred, labels=[0, 1, 2], average="macro", zero_division=0
-    )
-    report["active_model_holdout_macro_f1"] = round(float(active_macro_f1), 4)
-    with open(REPORT_PATH, "w", encoding="utf-8") as handle:
-        json.dump(report, handle, indent=2)
-
-    print(f"Active model holdout accuracy: {active_accuracy * 100:.2f}%")
-    print(f"Active model holdout macro-F1: {active_macro_f1:.4f}")
-    print(classification_report(y_test, y_pred, labels=[0, 1, 2], target_names=SIGNAL_NAMES, zero_division=0))
+    print(f"Best candidate by training CV: {best_name}")
+    print(f"Candidate chronological holdout accuracy: {candidate_accuracy * 100:.2f}%")
+    print(f"Candidate chronological holdout macro-F1: {candidate_macro_f1:.4f}")
+    print(f"Majority baseline accuracy: {majority_accuracy * 100:.2f}%")
+    if active_accuracy is None:
+        print("Active model holdout accuracy: UNVERIFIED (legacy model used a different training split)")
+    else:
+        print(f"Active model chronological holdout accuracy: {active_accuracy * 100:.2f}%")
+    print(classification_report(
+        y_test, candidate_prediction, labels=[0, 1, 2],
+        target_names=SIGNAL_NAMES, zero_division=0
+    ))
     print(f"Detailed report: {REPORT_PATH}")
-    if active_accuracy <= majority_accuracy + 0.05:
-        print("WARNING: Accuracy is close to the majority baseline. Improve the dataset labels/features before expecting a reliable gain.")
+    if candidate_accuracy <= majority_accuracy + 0.05:
+        print("WARNING: Candidate is close to the majority baseline. More reliable labels/features are required before promotion.")
 
 
 if __name__ == "__main__":
